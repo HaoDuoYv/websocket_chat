@@ -23,9 +23,10 @@ public class FileController {
     public ResponseEntity<FileUploadResponse> uploadFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam("chatId") String chatId,
-            @RequestParam("senderId") String senderId) {
-        
-        logger.info("收到文件上传请求 - chatId: {}, senderId: {}, 文件名: {}", 
+            @RequestParam("senderId") String senderId,
+            jakarta.servlet.http.HttpServletRequest request) {
+
+        logger.info("收到文件上传请求 - chatId: {}, senderId: {}, 文件名: {}",
                 chatId, senderId, file.getOriginalFilename());
 
         // 检查文件是否为空
@@ -49,7 +50,13 @@ public class FileController {
         }
 
         try {
-            FileUploadResponse response = fileUploadService.uploadFile(file, chatId, senderId);
+            FileUploadResponse response = fileUploadService.uploadFile(
+                    file,
+                    chatId,
+                    senderId,
+                    resolveScheme(request),
+                    resolveServerName(request),
+                    resolveServerPort(request));
             if (response.isSuccess()) {
                 return ResponseEntity.ok(response);
             } else {
@@ -58,15 +65,16 @@ public class FileController {
         } catch (Exception e) {
             logger.error("文件上传失败", e);
             return ResponseEntity.internalServerError()
-                    .body(new FileUploadResponse(false, "文件上传失败: " + e.getMessage(), 
+                    .body(new FileUploadResponse(false, "文件上传失败: " + e.getMessage(),
                             null, null, 0, null));
         }
     }
 
     @GetMapping("/info/{fileId}")
-    public ResponseEntity<FileUploadResponse> getFileInfo(@PathVariable String fileId) {
+    public ResponseEntity<FileUploadResponse> getFileInfo(@PathVariable String fileId,
+            jakarta.servlet.http.HttpServletRequest request) {
         try {
-            FileUploadResponse response = fileUploadService.getFileInfo(fileId);
+            FileUploadResponse response = fileUploadService.getFileInfo(fileId, request);
             if (response.isSuccess()) {
                 return ResponseEntity.ok(response);
             } else {
@@ -78,5 +86,65 @@ public class FileController {
                     .body(new FileUploadResponse(false, "获取文件信息失败: " + e.getMessage(),
                             null, null, 0, null));
         }
+    }
+
+    private String resolveScheme(jakarta.servlet.http.HttpServletRequest request) {
+        String forwardedProto = request.getHeader("X-Forwarded-Proto");
+        if (forwardedProto != null && !forwardedProto.isBlank()) {
+            return forwardedProto.split(",", 2)[0].trim();
+        }
+        return request.getScheme();
+    }
+
+    private String resolveServerName(jakarta.servlet.http.HttpServletRequest request) {
+        String forwardedHost = request.getHeader("X-Forwarded-Host");
+        String hostHeader = forwardedHost != null && !forwardedHost.isBlank()
+                ? forwardedHost
+                : request.getHeader("Host");
+        if (hostHeader == null || hostHeader.isBlank()) {
+            return request.getServerName();
+        }
+
+        String normalizedHost = hostHeader.split(",", 2)[0].trim();
+        if (normalizedHost.startsWith("[")) {
+            int closingBracketIndex = normalizedHost.indexOf(']');
+            if (closingBracketIndex > 0) {
+                return normalizedHost.substring(1, closingBracketIndex);
+            }
+            return request.getServerName();
+        }
+
+        String[] hostParts = normalizedHost.split(":", 2);
+        return hostParts[0];
+    }
+
+    private int resolveServerPort(jakarta.servlet.http.HttpServletRequest request) {
+        String forwardedPort = request.getHeader("X-Forwarded-Port");
+        if (forwardedPort != null && !forwardedPort.isBlank()) {
+            return Integer.parseInt(forwardedPort.split(",", 2)[0].trim());
+        }
+
+        String forwardedHost = request.getHeader("X-Forwarded-Host");
+        String hostHeader = forwardedHost != null && !forwardedHost.isBlank()
+                ? forwardedHost
+                : request.getHeader("Host");
+        if (hostHeader != null && !hostHeader.isBlank()) {
+            String normalizedHost = hostHeader.split(",", 2)[0].trim();
+            if (normalizedHost.startsWith("[")) {
+                int closingBracketIndex = normalizedHost.indexOf(']');
+                if (closingBracketIndex > 0
+                        && normalizedHost.length() > closingBracketIndex + 2
+                        && normalizedHost.charAt(closingBracketIndex + 1) == ':') {
+                    return Integer.parseInt(normalizedHost.substring(closingBracketIndex + 2));
+                }
+            } else {
+                String[] hostParts = normalizedHost.split(":", 2);
+                if (hostParts.length == 2 && !hostParts[1].isBlank()) {
+                    return Integer.parseInt(hostParts[1]);
+                }
+            }
+        }
+
+        return request.getServerPort();
     }
 }

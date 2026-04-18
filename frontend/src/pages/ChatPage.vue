@@ -6,6 +6,23 @@ import FileMessage from '@/components/FileMessage.vue'
 import FileUploadButton from '@/components/FileUploadButton.vue'
 import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
 
+const PROJECT_NOTICE_STORAGE_KEY = 'project-notice-dismissed'
+const projectNotice = {
+  title: '项目公告',
+  summary: '这是一个基于 WebSocket 的即时聊天系统演示项目，适合学习实时通信、前后端分离与聊天场景设计。',
+  highlights: [
+    '支持私聊、群聊、文件传输、表情消息与管理员后台。',
+    '前端使用 Vue 3 + TypeScript，后端基于 Spring Boot 与 WebSocket。',
+    '更适合用于学习、演示和局域网环境体验，不建议直接作为生产方案使用。'
+  ],
+  links: [
+    {
+      label: 'GitHub 项目地址',
+      href: 'https://github.com/HaoDuoYv/websocket_chat'
+    }
+  ]
+}
+
 interface PendingAttachment {
   id: string
   file: File
@@ -31,9 +48,11 @@ const uploadProgress = ref(0)
 const uploadingFileName = ref('')
 let dragDepth = 0
 
-const { connect, sendMessage, sendFileMessage, messages, onlineUsers, setCurrentRoom, rooms } = useWebSocket()
+const { connect, sendMessage, sendFileMessage, messages, onlineUsers, setCurrentRoom, rooms, loadMessageHistory } = useWebSocket()
 
 const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
+const isProjectNoticeOpen = ref(false)
+const hasShownProjectNotice = ref(false)
 
 const toggleTheme = () => {
   isDarkTheme.value = !isDarkTheme.value
@@ -136,9 +155,40 @@ const closeAttachmentPreview = () => {
   previewingAttachment.value = null
 }
 
+const handleAttachmentPreviewKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && previewingAttachment.value) {
+    closeAttachmentPreview()
+  }
+}
+
+watch(previewingAttachment, attachment => {
+  if (typeof document === 'undefined') return
+
+  if (attachment) {
+    document.body.style.overflow = 'hidden'
+    return
+  }
+
+  document.body.style.overflow = ''
+})
+
 watch(roomMessages, () => {
   scrollToBottom()
 }, { deep: true })
+
+const showProjectNotice = () => {
+  hasShownProjectNotice.value = true
+  isProjectNoticeOpen.value = true
+}
+
+const closeProjectNotice = () => {
+  isProjectNoticeOpen.value = false
+}
+
+const dismissProjectNotice = () => {
+  localStorage.setItem(PROJECT_NOTICE_STORAGE_KEY, 'true')
+  closeProjectNotice()
+}
 
 const initChat = () => {
   const userData = localStorage.getItem('user')
@@ -155,10 +205,14 @@ const initChat = () => {
 onMounted(() => {
   initChat()
   setCurrentRoom(currentRoomId.value)
+  loadMessageHistory(currentRoomId.value)
+  window.addEventListener('keydown', handleAttachmentPreviewKeydown)
 })
 
 onUnmounted(() => {
   clearPendingAttachments()
+  document.body.style.overflow = ''
+  window.removeEventListener('keydown', handleAttachmentPreviewKeydown)
 })
 
 onBeforeRouteUpdate((to, from, next) => {
@@ -166,6 +220,7 @@ onBeforeRouteUpdate((to, from, next) => {
     clearPendingAttachments()
     currentRoomId.value = to.params.chatId as string
     setCurrentRoom(currentRoomId.value)
+    loadMessageHistory(currentRoomId.value)
   }
   next()
 })
@@ -396,6 +451,19 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
 
         <div class="flex items-center gap-2">
           <button
+            @click="showProjectNotice"
+            class="w-9 h-9 flex items-center justify-center transition-colors"
+            :class="isDarkTheme ? 'text-cyan-400 hover:text-cyan-300' : 'text-[#0891B2] hover:text-[#0e7490]'"
+            title="项目公告"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 11.5a2.5 2.5 0 0 1 2.5-2.5H9l4.5-3v12L9 15H6.5A2.5 2.5 0 0 1 4 12.5z"/>
+              <path d="M14 9a4 4 0 0 1 0 6"/>
+              <path d="M16 7a7 7 0 0 1 0 10"/>
+            </svg>
+          </button>
+
+          <button
             @click="toggleTheme"
             class="w-9 h-9 flex items-center justify-center transition-colors"
             :class="isDarkTheme ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-400 hover:text-gray-600'"
@@ -523,8 +591,8 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             <button
               v-if="attachment.isImage"
               type="button"
-              class="block h-24 w-24 overflow-hidden"
-              @dblclick="openAttachmentPreview(attachment)"
+              class="block h-24 w-24 cursor-zoom-in overflow-hidden transition-transform duration-200 hover:scale-[1.02]"
+              @click="openAttachmentPreview(attachment)"
             >
               <img :src="attachment.previewUrl" :alt="attachment.file.name" class="h-full w-full object-cover" />
             </button>
@@ -546,7 +614,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
 
             <div v-if="attachment.isImage" class="absolute inset-x-0 bottom-0 bg-black/50 px-2 py-1 text-white">
               <p class="truncate text-xs">{{ attachment.file.name }}</p>
-              <p class="text-[11px] opacity-80">{{ formatFileSize(attachment.file.size) }} · 双击预览</p>
+              <p class="text-[11px] opacity-80">{{ formatFileSize(attachment.file.size) }} · 点击预览</p>
             </div>
           </div>
         </div>
@@ -667,22 +735,102 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
 
   <Teleport to="body">
     <div
-      v-if="previewingAttachment"
-      class="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
-      @click.self="closeAttachmentPreview"
+      v-if="isProjectNoticeOpen"
+      class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+      @click.self="closeProjectNotice"
     >
-      <button
-        type="button"
-        class="absolute right-4 top-4 rounded px-3 py-2 text-sm text-white transition-colors hover:bg-white/10"
-        @click="closeAttachmentPreview"
-      >
-        关闭
-      </button>
-      <img
-        :src="previewingAttachment.previewUrl"
-        :alt="previewingAttachment.file.name"
-        class="max-h-full max-w-full rounded object-contain"
-      />
+      <div class="w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl" :class="isDarkTheme ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-800'">
+        <div class="border-b px-6 py-5" :class="isDarkTheme ? 'border-slate-800' : 'border-slate-100'">
+          <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#0891B2]">项目公告</p>
+          <h2 class="mt-2 text-2xl font-semibold">{{ projectNotice.title }}</h2>
+          <p class="mt-3 text-sm leading-6" :class="isDarkTheme ? 'text-slate-300' : 'text-slate-600'">{{ projectNotice.summary }}</p>
+        </div>
+        <div class="px-6 py-5">
+          <div class="space-y-3">
+            <div
+              v-for="(item, index) in projectNotice.highlights"
+              :key="item"
+              class="flex items-start gap-3 rounded-2xl px-4 py-3"
+              :class="isDarkTheme ? 'bg-slate-800/70' : 'bg-slate-50'"
+            >
+              <span class="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#0891B2] text-xs font-semibold text-white">{{ index + 1 }}</span>
+              <p class="text-sm leading-6">{{ item }}</p>
+            </div>
+          </div>
+
+          <div class="mt-5 rounded-2xl border px-4 py-4" :class="isDarkTheme ? 'border-slate-700 bg-slate-950/40' : 'border-slate-200 bg-white'">
+            <p class="text-sm font-medium">相关链接</p>
+            <div class="mt-3 flex flex-col gap-2">
+              <a
+                v-for="link in projectNotice.links"
+                :key="link.href"
+                :href="link.href"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 text-sm text-[#0891B2] hover:underline break-all"
+              >
+                <span>{{ link.label }}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M7 17 17 7"/>
+                  <path d="M7 7h10v10"/>
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center justify-end gap-3 border-t px-6 py-4" :class="isDarkTheme ? 'border-slate-800 bg-slate-950/40' : 'border-slate-100 bg-slate-50'">
+          <button
+            type="button"
+            class="rounded-xl px-4 py-2 text-sm transition-colors"
+            :class="isDarkTheme ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-white'"
+            @click="closeProjectNotice"
+          >
+            关闭
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-[#0891B2] px-4 py-2 text-sm text-white transition-colors hover:bg-[#0e7490]"
+            @click="dismissProjectNotice"
+          >
+            今日不再提示
+          </button>
+        </div>
+      </div>
     </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="previewingAttachment"
+        class="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
+        @click.self="closeAttachmentPreview"
+      >
+        <div class="absolute inset-x-0 top-0 flex items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-4 py-4 text-white">
+          <p class="min-w-0 truncate text-sm font-medium" :title="previewingAttachment.file.name">
+            {{ previewingAttachment.file.name }}
+          </p>
+          <button
+            type="button"
+            class="shrink-0 rounded px-3 py-2 text-sm transition-colors hover:bg-white/10"
+            @click="closeAttachmentPreview"
+          >
+            关闭
+          </button>
+        </div>
+        <img
+          :src="previewingAttachment.previewUrl"
+          :alt="previewingAttachment.file.name"
+          class="max-h-full max-w-full rounded object-contain transition duration-200 ease-out"
+        />
+      </div>
+    </Transition>
   </Teleport>
 </template>

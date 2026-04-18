@@ -3,6 +3,7 @@ package com.chat.handler;
 import com.chat.entity.Message;
 import com.chat.entity.Room;
 import com.chat.entity.User;
+import com.chat.properties.LocalProperties;
 import com.chat.service.MessageService;
 import com.chat.service.RoomService;
 import com.chat.service.UserService;
@@ -40,6 +41,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private MessageService messageService;
+
+    @Autowired
+    private LocalProperties localProperties;
 
     /**
      * 解析 Long 类型的 ID，支持 Number 和 String 类型

@@ -12,6 +12,12 @@ export interface FileUploadResponse {
   fileType: string
 }
 
+export const normalizeFileUrl = (fileUrl: string): string => {
+  if (!fileUrl) return fileUrl
+
+  return fileUrl
+}
+
 export const uploadFile = async (
   file: File,
   chatId: string,

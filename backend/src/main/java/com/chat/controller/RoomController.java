@@ -3,10 +3,11 @@ package com.chat.controller;
 import com.chat.entity.Message;
 import com.chat.entity.Room;
 import com.chat.entity.User;
+import com.chat.handler.ChatWebSocketHandler;
+import com.chat.properties.LocalProperties;
 import com.chat.service.MessageService;
 import com.chat.service.RoomService;
 import com.chat.service.UserService;
-import com.chat.handler.ChatWebSocketHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +34,9 @@ public class RoomController {
 
     @Autowired
     private ChatWebSocketHandler chatWebSocketHandler;
+
+    @Autowired
+    private LocalProperties localProperties;
 
     @GetMapping
     public ResponseEntity<?> getUserRooms(@RequestParam Long userId) {
@@ -147,7 +151,8 @@ public class RoomController {
     @GetMapping("/{roomId}/messages")
     public ResponseEntity<?> getMessages(@PathVariable Long roomId,
             @RequestParam Long userId,
-            @RequestParam(required = false) Long lastSeq) {
+            @RequestParam(required = false) Long lastSeq,
+            jakarta.servlet.http.HttpServletRequest request) {
         try {
             List<Message> messages = messageService.getHistory(roomId, lastSeq);
             List<Map<String, Object>> messageList = messages.stream().map(msg -> {

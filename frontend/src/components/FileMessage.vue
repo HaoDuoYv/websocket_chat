@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { formatFileSize, getFileIcon, isImageFile } from '@/api/file'
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
 const props = defineProps<Props>()
 const isPreviewOpen = ref(false)
 const imageMessage = computed(() => isImageFile(props.fileType))
+const originalBodyOverflow = ref('')
 
 const handleDownload = () => {
   const link = document.createElement('a')
@@ -36,35 +37,72 @@ const handlePreview = () => {
 const closePreview = () => {
   isPreviewOpen.value = false
 }
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && isPreviewOpen.value) {
+    closePreview()
+  }
+}
+
+watch(isPreviewOpen, open => {
+  if (typeof document === 'undefined') return
+
+  if (open) {
+    originalBodyOverflow.value = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleKeydown)
+    return
+  }
+
+  document.body.style.overflow = originalBodyOverflow.value
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.body.style.overflow = originalBodyOverflow.value
+  }
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
   <div class="space-y-2">
     <div v-if="imageMessage" class="inline-flex max-w-full flex-col items-start gap-2">
-      <div class="group relative overflow-hidden rounded-2xl" :class="isDark ? 'bg-white/10' : 'bg-black/5'">
+      <button
+        type="button"
+        class="group relative overflow-hidden rounded-[24px] border shadow-sm ring-1 ring-inset transition-transform duration-200 hover:scale-[1.01]"
+        :class="isDark ? 'border-slate-700/80 bg-slate-900/70 ring-white/10' : 'border-slate-200 bg-white ring-slate-200/70'"
+        @click="handlePreview"
+      >
         <img
-          :src="fileUrl"
+          :src="props.fileUrl"
           :alt="fileName"
           class="block max-h-[360px] max-w-[220px] cursor-zoom-in object-cover sm:max-w-[260px] md:max-w-[320px]"
           loading="lazy"
-          @dblclick.stop="handlePreview"
         />
+
+        <div
+          class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t px-4 pb-3 pt-8"
+          :class="isDark ? 'from-slate-950/85 to-transparent' : 'from-black/60 to-transparent'"
+        >
+          <p class="truncate text-sm font-medium text-white drop-shadow-sm" :title="fileName">
+            {{ fileName }}
+          </p>
+          <p class="mt-1 text-[11px] text-white/80">
+            {{ formatFileSize(fileSize) }}
+          </p>
+        </div>
 
         <button
           type="button"
-          class="absolute right-2 top-2 rounded-full px-2.5 py-1 text-[11px] opacity-0 transition-all group-hover:opacity-100"
-          :class="isDark ? 'bg-slate-900/70 text-white hover:bg-slate-900/90' : 'bg-white/85 text-slate-700 hover:bg-white'"
+          class="absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] opacity-0 shadow-sm transition-all group-hover:opacity-100"
+          :class="isDark ? 'bg-slate-900/80 text-white hover:bg-slate-900' : 'bg-white/90 text-slate-700 hover:bg-white'"
           @click.stop="handleDownload"
         >
           下载
         </button>
-      </div>
-
-      <div class="min-w-0 px-1">
-        <p class="text-[11px] opacity-50">
-          双击预览
-        </p>
-      </div>
+      </button>
     </div>
 
     <div v-else class="flex items-start gap-3 rounded p-3" :class="isDark ? 'bg-white/10' : 'bg-black/5'">
@@ -103,24 +141,38 @@ const closePreview = () => {
   </div>
 
   <Teleport to="body">
-    <div
-      v-if="isPreviewOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/88 p-4"
-      @click.self="closePreview"
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
     >
-      <button
-        type="button"
-        class="absolute right-4 top-4 rounded px-3 py-2 text-sm text-white transition-colors hover:bg-white/10"
-        @click="closePreview"
+      <div
+        v-if="isPreviewOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/88 p-4"
+        @click.self="closePreview"
       >
-        关闭
-      </button>
+        <div class="absolute inset-x-0 top-0 flex items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-4 py-4 text-white">
+          <p class="min-w-0 truncate text-sm font-medium" :title="fileName">
+            {{ fileName }}
+          </p>
+          <button
+            type="button"
+            class="shrink-0 rounded px-3 py-2 text-sm transition-colors hover:bg-white/10"
+            @click="closePreview"
+          >
+            关闭
+          </button>
+        </div>
 
-      <img
-        :src="fileUrl"
-        :alt="fileName"
-        class="max-h-full max-w-full rounded object-contain"
-      />
-    </div>
+        <img
+          :src="props.fileUrl"
+          :alt="fileName"
+          class="max-h-full max-w-full rounded object-contain transition duration-200 ease-out"
+        />
+      </div>
+    </Transition>
   </Teleport>
 </template>

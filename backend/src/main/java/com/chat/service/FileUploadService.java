@@ -6,6 +6,7 @@ import com.chat.utils.LocalUploadUtil;
 import com.chat.vo.FileUploadResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,6 +27,9 @@ public class FileUploadService {
     @Autowired
     private LocalProperties localProperties;
 
+    @Value("${server.port:8081}")
+    private int configuredServerPort;
+
     // 内存中存储文件记录（实际项目中应该使用数据库）
     private final Map<String, FileRecord> fileRecords = new ConcurrentHashMap<>();
 
@@ -38,14 +42,16 @@ public class FileUploadService {
      * @return 文件上传响应
      * @throws IOException IO异常
      */
-    public FileUploadResponse uploadFile(MultipartFile file, String chatId, String senderId) throws IOException {
+    public FileUploadResponse uploadFile(MultipartFile file, String chatId, String senderId, String scheme, String serverName, int serverPort) throws IOException {
         // 生成文件ID
         String fileId = UUID.randomUUID().toString();
         String originalFilename = file.getOriginalFilename();
 
         // 使用 LocalUploadUtil 上传文件
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
-        String fileUrl = uploadUtil.uploadWithInfo(file, null, chatId, senderId);
+        String relativeFileUrl = uploadUtil.uploadWithInfo(file, null, chatId, senderId);
+        int resolvedPort = resolveFilePort(serverPort);
+        String fileUrl = uploadUtil.toAbsoluteFileUrl(relativeFileUrl, scheme, serverName, resolvedPort);
 
         // 创建文件记录
         FileRecord fileRecord = new FileRecord(
@@ -72,7 +78,7 @@ public class FileUploadService {
         response.setFileId(fileId);
         response.setFileName(originalFilename);
         response.setFileSize(file.getSize());
-        response.setFileUrl(fileUrl); // 返回相对路径，如 /files/20260412/uuid.jpg
+        response.setFileUrl(fileUrl);
         response.setFileType(file.getContentType());
 
         return response;
@@ -84,7 +90,7 @@ public class FileUploadService {
      * @param fileId 文件ID
      * @return 文件上传响应
      */
-    public FileUploadResponse getFileInfo(String fileId) {
+    public FileUploadResponse getFileInfo(String fileId, jakarta.servlet.http.HttpServletRequest request) {
         FileRecord record = fileRecords.get(fileId);
         if (record == null) {
             FileUploadResponse response = new FileUploadResponse();
@@ -113,5 +119,12 @@ public class FileUploadService {
      */
     public FileRecord getFileRecord(String fileId) {
         return fileRecords.get(fileId);
+    }
+
+    private int resolveFilePort(int requestPort) {
+        if (requestPort > 0 && requestPort != 80 && requestPort != 443) {
+            return requestPort;
+        }
+        return configuredServerPort;
     }
 }

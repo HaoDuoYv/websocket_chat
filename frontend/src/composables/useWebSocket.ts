@@ -51,6 +51,8 @@ interface InviteResult {
   targetUserId?: string
 }
 
+const normalizeMessageFileUrl = <T extends Message>(message: T): T => message
+
 interface BannedResult {
   message: string
 }
@@ -187,7 +189,7 @@ export function useWebSocket() {
         const fileMsgData = event.data
         console.log('Received file message:', fileMsgData)
 
-        const fileMessage: Message = {
+        const fileMessage = normalizeMessageFileUrl({
           id: fileMsgData.id,
           roomId: String(fileMsgData.roomId),
           content: fileMsgData.content,
@@ -196,12 +198,12 @@ export function useWebSocket() {
           timestamp: fileMsgData.timestamp,
           seq: fileMsgData.seq,
           type: 'file',
-  fileId: fileMsgData.fileId,
+          fileId: fileMsgData.fileId,
           fileName: fileMsgData.fileName,
           fileUrl: fileMsgData.fileUrl,
           fileSize: fileMsgData.fileSize,
           fileType: fileMsgData.fileType
-        }
+        })
 
         messages.value.push(fileMessage)
         lastMessage.value = fileMessage
@@ -226,10 +228,11 @@ export function useWebSocket() {
         const existingIds = new Set(messages.value.map(m => m.id))
         historyData.messages.forEach(msg => {
           if (!existingIds.has(msg.id)) {
-            if (msg.type === 'file' || msg.fileId) {
-              msg.type = 'file'
-            }
-            messages.value.push(msg)
+            const normalizedMsg = normalizeMessageFileUrl({
+              ...msg,
+              type: 'file'
+            })
+            messages.value.push(normalizedMsg)
           }
         })
         break
@@ -308,10 +311,11 @@ export function useWebSocket() {
           const existingIds = new Set(messages.value.map(m => m.id))
           syncData.messages.forEach(msg => {
             if (!existingIds.has(msg.id)) {
-              if (msg.type === 'file' || msg.fileId) {
-                msg.type = 'file'
-              }
-              messages.value.push(msg)
+                const normalizedMsg = normalizeMessageFileUrl({
+                  ...msg,
+                  type: 'file'
+                })
+                messages.value.push(normalizedMsg)
             }
             // 更新房间的最后序列号
             const roomId = String(msg.roomId)

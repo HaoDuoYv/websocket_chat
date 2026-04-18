@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 本地文件上传工具类
@@ -20,6 +22,8 @@ import java.util.UUID;
 @Slf4j
 @AllArgsConstructor
 public class LocalUploadUtil {
+
+    private static final Pattern HTTP_URL_PATTERN = Pattern.compile("^(https?)://([^/:]+)(:\\d+)?(/.*)?$");
 
     private LocalProperties localProperties;
 
@@ -55,7 +59,7 @@ public class LocalUploadUtil {
         file.transferTo(destFile);
 
         // 返回相对路径URL（如 /files/20260412/uuid.jpg）
-        return localProperties.getWebUrl() + "/" + dateDir + "/" + filename;
+        return buildRelativeFileUrl(dateDir, filename);
     }
 
     /**
@@ -93,6 +97,51 @@ public class LocalUploadUtil {
         file.transferTo(destFile);
 
         // 返回相对路径URL
-        return localProperties.getWebUrl() + "/" + targetDir + "/" + filename;
+        return buildRelativeFileUrl(targetDir, filename);
+    }
+
+    private String buildRelativeFileUrl(String directory, String filename) {
+        return localProperties.getWebUrl() + "/" + directory + "/" + filename;
+    }
+
+    public String toAbsoluteFileUrl(String fileUrl, String scheme, String serverName, int serverPort) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            return fileUrl;
+        }
+
+        int resolvedPort = serverPort > 0 ? serverPort : 8081;
+        String normalizedPath = normalizeFileUrlPath(fileUrl, scheme, serverName, resolvedPort);
+        StringBuilder builder = new StringBuilder();
+        builder.append(scheme).append("://").append(serverName);
+        if (!(("http".equalsIgnoreCase(scheme) && resolvedPort == 80)
+                || ("https".equalsIgnoreCase(scheme) && resolvedPort == 443))) {
+            builder.append(":").append(resolvedPort);
+        }
+        builder.append(normalizedPath);
+        return builder.toString();
+    }
+
+    private String normalizeFileUrlPath(String fileUrl, String scheme, String serverName, int serverPort) {
+        Matcher matcher = HTTP_URL_PATTERN.matcher(fileUrl);
+        if (matcher.matches()) {
+            String existingScheme = matcher.group(1);
+            String existingHost = matcher.group(2);
+            String existingPath = matcher.group(4);
+
+            boolean sameHost = existingHost != null && existingHost.equalsIgnoreCase(serverName);
+            boolean sameScheme = existingScheme != null && existingScheme.equalsIgnoreCase(scheme);
+            if (sameHost && sameScheme) {
+                return existingPath == null || existingPath.isBlank() ? "/" : existingPath;
+            }
+            return fileUrl;
+        }
+
+        if (fileUrl.startsWith("http//") || fileUrl.startsWith("https//")) {
+            String fixedUrl = fileUrl.replaceFirst("^http//", "http://")
+                    .replaceFirst("^https//", "https://");
+            return normalizeFileUrlPath(fixedUrl, scheme, serverName, serverPort);
+        }
+
+        return fileUrl.startsWith("/") ? fileUrl : "/" + fileUrl;
     }
 }
