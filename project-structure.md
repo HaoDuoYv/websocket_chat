@@ -158,3 +158,9 @@ backend/
 - **后端**: Spring Boot 3.2 + Spring WebSocket + Spring Data JPA + Spring Security Crypto
 - **数据库**: SQLite
 - **部署**: Nginx 反向代理
+
+## 相关文档
+
+- [README.md](README.md) - 项目概述和快速开始
+- [Technical_Architecture.md](Technical_Architecture.md) - 技术架构详细说明
+- [Database_Schema.md](Database_Schema.md) - SQLite 数据库表结构设计

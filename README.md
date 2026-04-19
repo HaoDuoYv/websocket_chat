@@ -477,6 +477,20 @@ snowflake.machine-id=0
 - `theme=dark` - 暗色主题
 - `theme=light` - 亮色主题
 
+## 数据库设计
+
+详细的数据库表结构设计请参阅 [Database_Schema.md](Database_Schema.md)。
+
+### 数据表概览
+
+| 表名 | 描述 |
+|------|------|
+| `users` | 用户信息表 |
+| `rooms` | 聊天房间表 |
+| `room_members` | 房间成员关系表 |
+| `messages` | 消息记录表 |
+| `user_remarks` | 用户备注表 |
+
 ## 许可证
 
 本项目仅供学习和参考使用。

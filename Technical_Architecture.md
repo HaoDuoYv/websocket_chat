@@ -151,6 +151,8 @@ graph TD
 
 ## 6. 数据模型
 
+详细的数据库表结构设计请参阅 [Database_Schema.md](Database_Schema.md)。
+
 ### 6.1 实体关系
 
 ```mermaid
@@ -160,7 +162,6 @@ graph LR
     Room -- 包含 --> RoomMember
     Room -- 包含 --> Message
     User -- 发送 --> Message
-    Message -- 引用 --> FileRecord
     User -- 设置备注 --> UserRemark
 ```
 
