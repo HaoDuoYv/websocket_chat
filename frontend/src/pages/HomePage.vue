@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { CSSProperties } from 'vue'
 import LoginForm from '@/components/LoginForm.vue'
@@ -577,14 +577,8 @@ const handleConfirm = () => {
 
 const handleContactClick = (targetUser: { userId: string; username: string }) => {
   selectedContact.value = targetUser
-  showConfirmDialog(
-    '发起私聊',
-    `确定要与 ${targetUser.username} 开始私聊吗？`,
-    () => {
-      startPrivateChat(targetUser.userId)
-      activeTab.value = 'messages'
-    }
-  )
+  startPrivateChat(targetUser.userId)
+  activeTab.value = 'messages'
 }
 
 const handleCreateDialogClose = () => {
