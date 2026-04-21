@@ -438,20 +438,6 @@ onUnmounted(() => {
             </div>
 
             <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">JVM 内存</span>
-                <span class="text-lg font-semibold" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ metrics ? metrics.jvmMemoryUsage.toFixed(1) : '--' }}%</span>
-              </div>
-              <div class="w-full h-2 rounded-full overflow-hidden" :class="isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'">
-                <div class="h-full transition-all duration-500 rounded-full" :class="metrics && metrics.jvmMemoryUsage > 80 ? 'bg-orange-500' : 'bg-purple-500'" :style="{ width: (metrics ? metrics.jvmMemoryUsage : 0) + '%' }"></div>
-              </div>
-              <div class="flex justify-between text-xs mt-2" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
-                <span>已用: {{ metrics ? formatMemory(metrics.jvmUsedMemory) : '--' }}</span>
-                <span>总计: {{ metrics ? formatMemory(metrics.jvmTotalMemory) : '--' }}</span>
-              </div>
-            </div>
-
-            <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
               <span class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">系统运行时间</span>
               <p class="text-lg font-semibold mt-1" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ metrics ? formatUptime(metrics.uptime) : '--' }}</p>
             </div>

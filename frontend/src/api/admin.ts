@@ -9,10 +9,6 @@ export interface SystemMetrics {
   usedMemory: number
   freeMemory: number
   memoryUsage: number
-  jvmTotalMemory: number
-  jvmUsedMemory: number
-  jvmFreeMemory: number
-  jvmMemoryUsage: number
   uptime: number
   timestamp: number
 }

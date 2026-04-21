@@ -195,3 +195,20 @@ export const getFileTypeDescription = (fileType: string): string => {
   }
   return typeMap[fileType] || '文件'
 }
+
+// 判断是否为 PDF 文件
+export const isPdfFile = (fileType: string): boolean => {
+  return fileType === 'application/pdf'
+}
+
+// 判断是否为文本文件
+export const isTextFile = (fileType: string): boolean => {
+  return fileType.startsWith('text/')
+}
+
+// 判断是否为代码文件
+export const isCodeFile = (fileName: string): boolean => {
+  const codeExtensions = ['js', 'ts', 'tsx', 'jsx', 'html', 'css', 'scss', 'less', 'json', 'xml', 'yaml', 'yml', 'java', 'py', 'php', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'swift', 'kt', 'sql', 'sh', 'bat', 'ps1', 'vue', 'svelte']
+  const extension = fileName.split('.').pop()?.toLowerCase() || ''
+  return codeExtensions.includes(extension)
+}

@@ -54,12 +54,6 @@ public class SystemMonitorService {
         metrics.setFreeMemory(maxMemory - usedMemory);
         metrics.setMemoryUsage(((double) usedMemory / maxMemory) * 100);
         
-        // JVM内存信息
-        metrics.setJvmTotalMemory(totalMemory);
-        metrics.setJvmFreeMemory(freeMemory);
-        metrics.setJvmUsedMemory(usedMemory);
-        metrics.setJvmMemoryUsage(((double) usedMemory / totalMemory) * 100);
-        
         // 系统运行时间
         RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
         metrics.setUptime(runtimeMXBean.getUptime() / 1000);

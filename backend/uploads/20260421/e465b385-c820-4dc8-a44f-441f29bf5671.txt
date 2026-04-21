@@ -1,0 +1,48 @@
+food-delivery-system/
+├── public/
+│   └── index.html
+├── src/
+│   │── img/
+│   │   └── log.jpg
+│   ├── main.ts
+│   ├── App.vue
+│   ├── router/
+│   │   └── index.ts
+│   ├── stores/
+│   │   ├── auth.ts
+│   │   ├── order.ts
+│   │   └── index.ts
+│   ├── views/
+│   │   ├── Login.vue
+│   │   ├── Register.vue
+│   │   ├── ForgotPassword.vue
+│   │   ├── Dashboard.vue
+│   │   ├── AllOrders.vue
+│   │   ├── MyOrders.vue
+│   │   ├── OrderManage.vue
+│   │   ├── OrderSearch.vue
+│   │   ├── Settings.vue
+│   │   ├── ModifyUsername.vue
+│   │   └── ModifyPassword.vue
+│   ├── components/
+│   │   ├── Sidebar.vue
+│   │   ├── TopNav.vue
+│   │   └── StatCard.vue
+│   ├── services/
+│   │   └── api.ts
+│   ├── types/
+│   │   └── index.ts
+│   ├── assets/
+│   │   ├── css/
+│   │   │   ├── main.css
+│   │   │   └── auth.css
+│   │   └── images/
+│   │       └── login-bg.jpg (可选，可以用纯色背景)
+│   ├── shims-vue.d.ts
+│   └── env.d.ts
+├── index.html
+├── package.json
+├── tsconfig.json
+├── tsconfig.node.json
+├── vite.config.ts
+└── README.md                      以上是我的项目目录 根据我提供的jsp文件把他们重构为vue3的形式 即Register.vue，ModifyUsername.vue，ModifyPassword.vue，ForgotPassword.vue  Login.vue为示例。stores内容也已给出

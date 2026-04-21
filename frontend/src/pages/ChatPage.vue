@@ -8,7 +8,7 @@ import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file
 
 const PROJECT_NOTICE_STORAGE_KEY = 'project-notice-dismissed'
 const projectNotice = {
-  title: '项目公告',
+  title: '关于本项目',
   summary: '这是一个基于 WebSocket 的即时聊天系统演示项目，适合学习实时通信、前后端分离与聊天场景设计。',
   highlights: [
     '支持私聊、群聊、文件传输、表情消息与管理员后台。',
@@ -454,12 +454,12 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             @click="showProjectNotice"
             class="w-9 h-9 flex items-center justify-center transition-colors"
             :class="isDarkTheme ? 'text-cyan-400 hover:text-cyan-300' : 'text-[#0891B2] hover:text-[#0e7490]'"
-            title="项目公告"
+            title="关于本项目"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 11.5a2.5 2.5 0 0 1 2.5-2.5H9l4.5-3v12L9 15H6.5A2.5 2.5 0 0 1 4 12.5z"/>
-              <path d="M14 9a4 4 0 0 1 0 6"/>
-              <path d="M16 7a7 7 0 0 1 0 10"/>
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4"/>
+              <path d="M12 8h.01"/>
             </svg>
           </button>
 
@@ -741,7 +741,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
     >
       <div class="w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl" :class="isDarkTheme ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-800'">
         <div class="border-b px-6 py-5" :class="isDarkTheme ? 'border-slate-800' : 'border-slate-100'">
-          <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#0891B2]">项目公告</p>
+          <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#0891B2]">关于本项目</p>
           <h2 class="mt-2 text-2xl font-semibold">{{ projectNotice.title }}</h2>
           <p class="mt-3 text-sm leading-6" :class="isDarkTheme ? 'text-slate-300' : 'text-slate-600'">{{ projectNotice.summary }}</p>
         </div>

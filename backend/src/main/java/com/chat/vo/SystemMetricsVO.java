@@ -39,26 +39,6 @@ public class SystemMetricsVO {
     private double memoryUsage;
     
     /**
-     * JVM内存总量 (MB)
-     */
-    private long jvmTotalMemory;
-    
-    /**
-     * JVM已用内存 (MB)
-     */
-    private long jvmUsedMemory;
-    
-    /**
-     * JVM剩余内存 (MB)
-     */
-    private long jvmFreeMemory;
-    
-    /**
-     * JVM内存使用率 (%)
-     */
-    private double jvmMemoryUsage;
-    
-    /**
      * 系统运行时间 (秒)
      */
     private long uptime;
