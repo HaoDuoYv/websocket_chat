@@ -8,7 +8,7 @@ import FileUploadButton from '@/components/FileUploadButton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetRemarkDialog from '@/components/SetRemarkDialog.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
-import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
+import { formatFileSize, getFileIcon, getFileTypeDescription, isImageFile, uploadFile } from '@/api/file'
 import { getUserRemarks, saveUserRemark } from '@/api/userRemark'
 
 const PROJECT_NOTICE_STORAGE_KEY = 'project-notice-dismissed'
@@ -64,7 +64,8 @@ const {
   socket,
   lastInviteResult,
   lastBannedResult,
-  lastRoomMemberLeft
+  lastRoomMemberLeft,
+  lastPrivateRoomCreated,
 } = useWebSocket()
 
 const selectedRoomId = ref<string | null>(null)
@@ -76,6 +77,7 @@ const isDraggingFile = ref(false)
 const fileUploadButtonRef = ref<{ queueFiles: (files: File[] | FileList) => Promise<void> } | null>(null)
 const pendingAttachments = ref<PendingAttachment[]>([])
 const previewingAttachment = ref<PendingAttachment | null>(null)
+const previewingSentImage = ref<{ fileName: string; fileSize: number; fileUrl: string; fileType: string } | null>(null)
 const isSendingFiles = ref(false)
 const uploadProgress = ref(0)
 const uploadingFileName = ref('')
@@ -196,12 +198,9 @@ const getRemarkName = (targetUserId: string, fallbackName: string) => {
 const getDisplayRoomName = (room: { id: string; name: string; type: string }) => {
   if (room.type !== 'private') return room.name
 
-  const partner = otherUsers.value.find(contact => contact.userId === room.name)
-  if (partner) {
-    return getRemarkName(partner.userId, partner.username)
-  }
-
-  return getRemarkName(room.name, room.name)
+  // 私聊房间：room.name 由后端设置，已经是对方的用户名（或备注名）
+  // 直接使用即可，无需额外匹配
+  return room.name
 }
 
 const getMessageSenderName = (senderId: string, senderName: string) => {
@@ -411,25 +410,39 @@ const openAttachmentPreview = (attachment: PendingAttachment) => {
   previewingAttachment.value = attachment
 }
 
+const openSentImagePreview = (data: { fileName: string; fileSize: number; fileUrl: string; fileType: string }) => {
+  if (!isImageFile(data.fileType)) return
+  previewingSentImage.value = data
+}
+
 const closeAttachmentPreview = () => {
   previewingAttachment.value = null
+  previewingSentImage.value = null
+}
+
+const downloadPreviewedAttachment = () => {
+  const url = previewingAttachment.value?.previewUrl || previewingSentImage.value?.fileUrl
+  const name = previewingAttachment.value?.file.name || previewingSentImage.value?.fileName
+  if (!url || !name) return
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 const handleAttachmentPreviewKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && previewingAttachment.value) {
+  if (event.key === 'Escape' && (previewingAttachment.value || previewingSentImage.value)) {
     closeAttachmentPreview()
   }
 }
 
-watch(previewingAttachment, attachment => {
+const anyPreviewOpen = computed(() => !!previewingAttachment.value || !!previewingSentImage.value)
+watch(anyPreviewOpen, open => {
   if (typeof document === 'undefined') return
-
-  if (attachment) {
-    document.body.style.overflow = 'hidden'
-    return
-  }
-
-  document.body.style.overflow = ''
+  document.body.style.overflow = open ? 'hidden' : ''
 })
 
 watch(activeTab, value => {
@@ -516,6 +529,16 @@ watch(lastRoomMemberLeft, async event => {
   lastRoomMemberLeft.value = null
 })
 
+// 当私聊房间创建后自动选中
+watch(lastPrivateRoomCreated, room => {
+  if (!room || !selectedContact.value) return
+  // 仅在用户刚点击了联系人时才自动选中
+  if (selectedRoomId.value !== room.id) {
+    selectedRoomId.value = room.id
+  }
+  lastPrivateRoomCreated.value = null
+})
+
 const showProjectNotice = () => {
   hasShownProjectNotice.value = true
   isProjectNoticeOpen.value = true
@@ -577,8 +600,18 @@ const handleConfirm = () => {
 
 const handleContactClick = (targetUser: { userId: string; username: string }) => {
   selectedContact.value = targetUser
-  startPrivateChat(targetUser.userId)
-  activeTab.value = 'messages'
+
+  // 如果私聊房间已存在，直接选中并切换
+  const existingPrivateRoom = rooms.value.find(
+    r => r.type === 'private' && r.name === targetUser.username
+  )
+  if (existingPrivateRoom) {
+    selectedRoomId.value = existingPrivateRoom.id
+    activeTab.value = 'messages'
+  } else {
+    startPrivateChat(targetUser.userId)
+    activeTab.value = 'messages'
+  }
 }
 
 const handleCreateDialogClose = () => {
@@ -1371,7 +1404,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
                   <div
                     :class="[
                       isImageMessage(message)
-                        ? 'overflow-hidden rounded-2xl px-1 py-1'
+                        ? 'overflow-hidden rounded-[20px] px-0.5 py-0.5'
                         : 'rounded-2xl px-4 py-2 text-sm',
                       String(message.senderId) === user?.userId
                         ? 'bg-[#0891B2]'
@@ -1386,6 +1419,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
                         :file-url="message.fileUrl || ''"
                         :file-type="message.fileType || ''"
                         :is-dark="isDarkTheme"
+                        @preview="openSentImagePreview"
                       />
                     </div>
 
@@ -1522,30 +1556,35 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
           v-if="isSendingFiles"
           class="absolute inset-0 z-40 flex items-center justify-center bg-black/25 backdrop-blur-sm"
         >
-          <div class="w-80 rounded-2xl border px-5 py-4" :class="isDarkTheme ? 'border-gray-700 bg-slate-900 text-slate-100' : 'border-gray-200 bg-white text-slate-800'">
-            <div class="flex items-center justify-between gap-3">
+          <div class="w-96 rounded-2xl border px-6 py-5" :class="isDarkTheme ? 'border-gray-700 bg-slate-900 text-slate-100' : 'border-gray-200 bg-white text-slate-800'">
+            <div class="flex items-center justify-between gap-3 mb-4">
               <div>
-                <p class="text-sm font-medium">正在发送附件</p>
+                <p class="text-sm font-medium">正在上传文件</p>
                 <p class="mt-1 truncate text-xs opacity-70">{{ uploadingFileName || '准备中...' }}</p>
               </div>
-              <span class="text-sm font-medium">{{ uploadProgress }}%</span>
+              <span class="text-sm font-medium tabular-nums">{{ uploadProgress }}%</span>
             </div>
-            <div class="mt-3 h-2 overflow-hidden rounded-full" :class="isDarkTheme ? 'bg-slate-800' : 'bg-slate-200'">
-              <div class="h-full rounded-full bg-[#0891B2] transition-all duration-200" :style="{ width: `${uploadProgress}%` }"></div>
+            <div class="mt-1 h-2.5 overflow-hidden rounded-full" :class="isDarkTheme ? 'bg-slate-800' : 'bg-slate-200'">
+              <div class="h-full rounded-full bg-[#0891B2] transition-all duration-300 ease-out" :style="{ width: `${uploadProgress}%` }"></div>
+            </div>
+            <div v-if="uploadError" class="mt-4 text-xs text-red-500">
+              {{ uploadError }}
             </div>
           </div>
         </div>
 
         <div
           v-if="isDraggingFile"
-          class="absolute inset-0 z-40 flex items-center justify-center bg-[#0891B2]/10 backdrop-blur-sm"
+          class="absolute inset-0 z-40 flex items-center justify-center bg-[#0891B2]/15 backdrop-blur-sm transition-opacity duration-300"
         >
           <div
-            class="rounded-2xl border-2 border-dashed px-8 py-10 text-center"
+            class="rounded-2xl border-2 border-dashed px-10 py-12 text-center"
             :class="isDarkTheme ? 'border-[#38BDF8] bg-slate-900/80 text-slate-100' : 'border-[#0891B2] bg-white/95 text-slate-700'"
           >
-            <p class="text-base font-medium">松开发送图片或文件</p>
-            <p class="mt-2 text-sm opacity-70">文件会先进入输入框，点击发送后再上传</p>
+            <div class="text-4xl mb-4">📁</div>
+            <p class="text-lg font-medium mb-2">松开发送文件</p>
+            <p class="text-sm opacity-70">支持图片、文档、音频、视频等多种文件类型</p>
+            <p class="text-xs mt-4 opacity-60">单个文件最大 500MB</p>
           </div>
         </div>
       </template>
@@ -1732,35 +1771,60 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
   </div>
   <Teleport to="body">
     <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="opacity-0 scale-95"
+      enter-to-class="opacity-100 scale-100"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="opacity-100 scale-100"
+      leave-to-class="opacity-0 scale-95"
     >
       <div
-        v-if="previewingAttachment"
+        v-if="previewingAttachment || previewingSentImage"
         class="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
         @click.self="closeAttachmentPreview"
       >
-        <div class="absolute inset-x-0 top-0 flex items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-4 py-4 text-white">
-          <p class="min-w-0 truncate text-sm font-medium" :title="previewingAttachment.file.name">
-            {{ previewingAttachment.file.name }}
-          </p>
-          <button
-            type="button"
-            class="shrink-0 rounded px-3 py-2 text-sm transition-colors hover:bg-white/10"
-            @click="closeAttachmentPreview"
-          >
-            关闭
-          </button>
+        <!-- 顶部信息栏 -->
+        <div class="absolute inset-x-0 top-0 flex items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-6 py-4 text-white">
+          <div class="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              class="shrink-0 rounded-full p-2 transition-colors hover:bg-white/10"
+              @click="closeAttachmentPreview"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+            <p class="min-w-0 truncate text-sm font-medium" :title="previewingAttachment?.file.name || previewingSentImage?.fileName">
+              {{ previewingAttachment?.file.name || previewingSentImage?.fileName }}
+            </p>
+          </div>
+          <div class="flex items-center gap-3 shrink-0">
+            <span class="text-sm opacity-80">{{ formatFileSize(previewingAttachment?.file.size || previewingSentImage?.fileSize || 0) }}</span>
+            <button
+              type="button"
+              class="shrink-0 rounded-full p-2 transition-colors hover:bg-white/10"
+              @click="downloadPreviewedAttachment"
+              title="下载"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <img
-          :src="previewingAttachment.previewUrl"
-          :alt="previewingAttachment.file.name"
-          class="max-h-full max-w-full rounded object-contain transition duration-200 ease-out"
+          :src="previewingAttachment?.previewUrl || previewingSentImage?.fileUrl"
+          :alt="previewingAttachment?.file.name || previewingSentImage?.fileName"
+          class="max-h-[80vh] max-w-[90vw] rounded-lg object-contain transition-transform duration-300 ease-out"
         />
+        <!-- 底部操作提示 -->
+        <div class="absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-black/60 to-transparent px-6 py-4">
+          <p class="text-xs text-white/60">点击空白区域关闭预览</p>
+        </div>
       </div>
     </Transition>
   </Teleport>

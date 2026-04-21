@@ -434,7 +434,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             // 将 ID 转为 String 避免前端精度丢失
             // 注意：前端 Room 接口使用 "id" 而不是 "roomId"
             responseData.put("id", String.valueOf(room.getId()));
-            responseData.put("name", room.getName());
+            // 使用 getPrivateRoomDisplayName 确保返回的是当前用户视角下对方的用户名/备注名
+            responseData.put("name", roomService.getPrivateRoomDisplayName(userId, room.getId(), room.getName()));
             responseData.put("type", room.getType());
             responseData.put("createdAt", room.getCreatedAt());
 

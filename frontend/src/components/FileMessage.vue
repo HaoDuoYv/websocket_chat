@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getFileIcon, isImageFile } from '@/api/file'
+import { formatFileSize, getFileIcon, isImageFile, getFileTypeDescription, isVideoFile } from '@/api/file'
 
 interface Props {
   fileName: string
@@ -11,11 +11,14 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const emit = defineEmits<{
+  preview: [{ fileName: string; fileSize: number; fileUrl: string; fileType: string }]
+}>()
 const imageMessage = computed(() => isImageFile(props.fileType))
+const videoMessage = computed(() => isVideoFile(props.fileType))
 
 const handleDownload = async () => {
   try {
-    // 对于 HTML 和 TXT 文件，使用 Fetch API 强制下载
     if (props.fileType.includes('text/html') || props.fileType.includes('text/plain')) {
       const response = await fetch(props.fileUrl)
       const blob = await response.blob()
@@ -29,7 +32,6 @@ const handleDownload = async () => {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
     } else {
-      // 其他文件类型使用常规下载
       const link = document.createElement('a')
       link.href = props.fileUrl
       link.download = props.fileName
@@ -40,7 +42,6 @@ const handleDownload = async () => {
     }
   } catch (error) {
     console.error('下载失败:', error)
-    // 失败时使用备用方法
     const link = document.createElement('a')
     link.href = props.fileUrl
     link.download = props.fileName
@@ -52,66 +53,128 @@ const handleDownload = async () => {
 }
 
 const handlePreview = () => {
-  // 所有文件类型都在新窗口中预览
-  window.open(props.fileUrl, '_blank', 'noopener')
+  emit('preview', {
+    fileName: props.fileName,
+    fileSize: props.fileSize,
+    fileUrl: props.fileUrl,
+    fileType: props.fileType
+  })
 }
 </script>
 
 <template>
   <div class="space-y-2">
+    <!-- 图片文件 -->
     <div v-if="imageMessage" class="inline-flex max-w-full flex-col items-start gap-2">
-      <div class="group relative overflow-hidden rounded-[24px] border shadow-sm ring-1 ring-inset transition-transform duration-200 hover:scale-[1.01]"
+      <div class="group relative overflow-hidden rounded-[24px] border shadow-sm ring-1 ring-inset transition-all duration-300 hover:scale-[1.02] hover:shadow-md"
         :class="isDark ? 'border-slate-700/80 bg-slate-900/70 ring-white/10' : 'border-slate-200 bg-white ring-slate-200/70'">
         <img
           :src="props.fileUrl"
           :alt="fileName"
-          class="block max-h-[360px] max-w-[220px] cursor-zoom-in object-cover sm:max-w-[260px] md:max-w-[320px]"
+          class="block max-h-[360px] max-w-[220px] cursor-zoom-in object-cover sm:max-w-[260px] md:max-w-[320px] transition-transform duration-500 hover:scale-105"
           loading="lazy"
+          @click="handlePreview"
         />
 
+        <!-- 图片信息叠加层 -->
+        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+          <div class="flex items-center justify-between">
+            <span class="text-white text-xs font-medium truncate">{{ fileName }}</span>
+            <span class="text-white/80 text-xs">{{ formatFileSize(fileSize) }}</span>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
         <div class="flex absolute right-3 top-3 gap-2">
           <button
             type="button"
             class="rounded-full px-2.5 py-1 text-[11px] opacity-0 shadow-sm transition-all group-hover:opacity-100"
             :class="isDark ? 'bg-slate-900/80 text-white hover:bg-slate-900' : 'bg-white/90 text-slate-700 hover:bg-white'"
             @click="handleDownload"
+            title="下载"
           >
-            下载
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
           </button>
           <button
             type="button"
             class="rounded-full px-2.5 py-1 text-[11px] opacity-0 shadow-sm transition-all group-hover:opacity-100"
             :class="isDark ? 'bg-slate-900/80 text-white hover:bg-slate-900' : 'bg-white/90 text-slate-700 hover:bg-white'"
             @click="handlePreview"
+            title="预览"
           >
-            预览
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
           </button>
         </div>
       </div>
     </div>
 
-    <div v-else class="flex items-start gap-3 rounded p-3" :class="isDark ? 'bg-white/10' : 'bg-black/5'">
+    <!-- 视频文件 -->
+    <div v-else-if="videoMessage" class="inline-flex max-w-full flex-col items-start gap-2">
+      <div class="relative overflow-hidden rounded-[16px] border shadow-sm ring-1 ring-inset"
+        :class="isDark ? 'border-slate-700/80 bg-slate-900/70 ring-white/10' : 'border-slate-200 bg-white ring-slate-200/70'">
+        <video
+          :src="props.fileUrl"
+          class="block max-h-[300px] max-w-[260px] sm:max-w-[320px] object-cover"
+          controls
+          preload="metadata"
+          playsinline
+        >
+          您的浏览器不支持视频播放
+        </video>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs" :class="isDark ? 'text-gray-400' : 'text-gray-500'">{{ fileName }}</span>
+        <span class="text-xs opacity-60" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ formatFileSize(fileSize) }}</span>
+      </div>
+    </div>
+
+    <!-- 普通文件 -->
+    <div v-else class="flex items-start gap-3 rounded-lg p-4 transition-all duration-300 hover:shadow-sm"
+      :class="isDark ? 'bg-white/10 hover:bg-white/15' : 'bg-black/5 hover:bg-black/10'">
       <div class="flex-shrink-0">
-        <div class="flex h-16 w-16 items-center justify-center rounded text-3xl" :class="isDark ? 'bg-gray-700' : 'bg-gray-200'">
+        <div class="flex h-14 w-14 items-center justify-center rounded-lg text-2xl transition-transform duration-300 hover:scale-110"
+          :class="isDark ? 'bg-gray-700' : 'bg-gray-200'">
           {{ getFileIcon(fileName) }}
         </div>
       </div>
 
       <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium truncate" :class="isDark ? 'text-gray-200' : 'text-gray-800'">
+          {{ fileName }}
+        </p>
+        <p class="mt-1 text-xs" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+          {{ formatFileSize(fileSize) }} · {{ getFileTypeDescription(fileType) }}
+        </p>
 
-        <div class="mt-2 flex gap-2">
+        <div class="mt-2.5 flex gap-2">
           <button
             @click="handleDownload"
-            class="rounded px-2 py-1 text-xs transition-colors"
+            class="flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors"
             :class="isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-black/10 hover:bg-black/20'"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
             下载
           </button>
           <button
             @click="handlePreview"
-            class="rounded px-2 py-1 text-xs transition-colors"
+            class="flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors"
             :class="isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-black/10 hover:bg-black/20'"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
             预览
           </button>
         </div>

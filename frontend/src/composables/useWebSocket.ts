@@ -74,6 +74,7 @@ export function useWebSocket() {
   const lastInviteResult = ref<InviteResult | null>(null)
   const lastBannedResult = ref<BannedResult | null>(null)
   const lastRoomMemberLeft = ref<RoomMemberLeftEvent | null>(null)
+  const lastPrivateRoomCreated = ref<{ id: string; name: string; type: string } | null>(null)
 
   // 每个房间的最后读取序列号（用于增量同步）
   const roomLastSeq = ref<Record<string, number>>({})
@@ -297,6 +298,7 @@ export function useWebSocket() {
 
       case 'room:private:created':
         const privateRoom = event.data as Room
+        lastPrivateRoomCreated.value = { id: String(privateRoom.id), name: privateRoom.name, type: privateRoom.type }
         // 检查是否已存在
         const existingRoom = rooms.value.find(r => r.id === privateRoom.id)
         if (!existingRoom) {
@@ -458,6 +460,7 @@ export function useWebSocket() {
     lastInviteResult,
     lastBannedResult,
     lastRoomMemberLeft,
+    lastPrivateRoomCreated,
     roomLastSeq,
     connect,
     sendMessage,

@@ -73,28 +73,125 @@ export const isImageFile = (fileType: string): boolean => {
   return fileType?.startsWith('image/') || false
 }
 
-// 获取文件图标
+// 判断是否为视频文件
+export const isVideoFile = (fileType: string): boolean => {
+  return fileType?.startsWith('video/') || false
+}
+
+// 增强的文件图标映射
 export const getFileIcon = (fileName: string): string => {
   const extension = fileName.split('.').pop()?.toLowerCase() || ''
   const iconMap: Record<string, string> = {
-    pdf: '📄',
-    doc: '📝',
-    docx: '📝',
-    xls: '📊',
-    xlsx: '📊',
-    ppt: '📽️',
-    pptx: '📽️',
-    txt: '📃',
-    zip: '📦',
-    rar: '📦',
-    '7z': '📦',
-    mp3: '🎵',
-    mp4: '🎬',
-    avi: '🎬',
+    // 图片文件
     jpg: '🖼️',
     jpeg: '🖼️',
     png: '🖼️',
-    gif: '🖼️'
+    gif: '🖼️',
+    webp: '🖼️',
+    svg: '🖼️',
+    bmp: '🖼️',
+    ico: '🖼️',
+
+    // 文档文件
+    pdf: '📄',
+    doc: '📝',
+    docx: '📝',
+    txt: '📃',
+    rtf: '📝',
+    md: '📄',
+
+    // 表格文件
+    xls: '📊',
+    xlsx: '📊',
+    csv: '📊',
+
+    // 演示文件
+    ppt: '📽️',
+    pptx: '📽️',
+
+    // 压缩文件
+    zip: '📦',
+    rar: '📦',
+    '7z': '📦',
+    tar: '📦',
+    gz: '📦',
+
+    // 音频文件
+    mp3: '🎵',
+    wav: '🎵',
+    ogg: '🎵',
+    flac: '🎵',
+    aac: '🎵',
+    wma: '🎵',
+
+    // 视频文件
+    mp4: '🎬',
+    avi: '🎬',
+    mov: '🎬',
+    wmv: '🎬',
+    mkv: '🎬',
+    flv: '🎬',
+
+    // 代码文件
+    js: '💻',
+    ts: '💻',
+    html: '🌐',
+    css: '🎨',
+    scss: '🎨',
+    json: '📄',
+    xml: '📄',
+    java: '☕',
+    py: '🐍',
+    php: '🐘',
+    go: '🚀',
+    c: '⚙️',
+    cpp: '⚙️',
+    h: '⚙️',
+
+    // 其他文件
+    exe: '⚙️',
+    dmg: '💿',
+    apk: '📱',
+    sql: '🗃️',
+    sh: '💻',
   }
   return iconMap[extension] || '📎'
+}
+
+// 文件类型描述
+export const getFileTypeDescription = (fileType: string): string => {
+  const typeMap: Record<string, string> = {
+    'image/jpeg': 'JPEG 图片',
+    'image/png': 'PNG 图片',
+    'image/gif': 'GIF 图片',
+    'image/webp': 'WebP 图片',
+    'image/svg+xml': 'SVG 图片',
+    'image/bmp': 'BMP 图片',
+    'application/pdf': 'PDF 文档',
+    'application/msword': 'Word 文档',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word 文档',
+    'application/vnd.ms-excel': 'Excel 表格',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel 表格',
+    'application/vnd.ms-powerpoint': 'PowerPoint 演示',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PowerPoint 演示',
+    'text/plain': '文本文件',
+    'text/html': 'HTML 文件',
+    'text/css': 'CSS 文件',
+    'text/csv': 'CSV 表格',
+    'application/javascript': 'JavaScript 文件',
+    'application/json': 'JSON 文件',
+    'application/xml': 'XML 文件',
+    'application/zip': 'ZIP 压缩文件',
+    'application/x-rar-compressed': 'RAR 压缩文件',
+    'application/x-7z-compressed': '7Z 压缩文件',
+    'audio/mpeg': 'MP3 音频',
+    'audio/wav': 'WAV 音频',
+    'audio/ogg': 'OGG 音频',
+    'video/mp4': 'MP4 视频',
+    'video/avi': 'AVI 视频',
+    'video/quicktime': 'MOV 视频',
+    'video/x-msvideo': 'WMV 视频',
+    'video/x-matroska': 'MKV 视频',
+  }
+  return typeMap[fileType] || '文件'
 }
