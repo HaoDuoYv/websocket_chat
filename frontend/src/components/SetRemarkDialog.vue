@@ -32,7 +32,7 @@
           </button>
           <button
             type="submit"
-            class="flex-1 px-4 py-2 text-sm bg-[#0891B2] text-white hover:bg-[#0E7490] disabled:bg-gray-300"
+            class="flex-1 px-4 py-2 text-sm bg-[#18181B] text-white hover:bg-[#27272A] disabled:bg-gray-300"
             :disabled="!remarkName"
           >
             保存

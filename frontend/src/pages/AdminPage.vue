@@ -86,7 +86,7 @@ const getLogLevelClass = (level: string): string => {
   const levelMap: Record<string, string> = {
     ERROR: isDarkTheme.value ? 'text-red-400 bg-red-400/10' : 'text-red-600 bg-red-100',
     WARN: isDarkTheme.value ? 'text-yellow-400 bg-yellow-400/10' : 'text-yellow-600 bg-yellow-100',
-    INFO: isDarkTheme.value ? 'text-blue-400 bg-blue-400/10' : 'text-blue-600 bg-blue-100',
+    INFO: isDarkTheme.value ? 'text-gray-400 bg-gray-400/10' : 'text-[#18181B] bg-gray-100',
     DEBUG: isDarkTheme.value ? 'text-gray-400 bg-gray-400/10' : 'text-gray-600 bg-gray-100'
   }
   return levelMap[level] || levelMap.INFO
@@ -276,7 +276,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen" :class="isDarkTheme ? 'bg-[#1a1a2e]' : 'bg-gray-50'">
+  <div class="flex flex-col min-h-screen" :class="isDarkTheme ? 'bg-[#18181B]' : 'bg-gray-50'">
     <header class="px-6 py-4 flex justify-between items-center border-b" :class="isDarkTheme ? 'border-gray-700/50' : 'border-gray-200'">
       <div class="flex items-center gap-3">
         <button
@@ -330,7 +330,7 @@ onUnmounted(() => {
           <button
             @click="loadData"
             class="px-3 py-1.5 text-white text-sm font-medium rounded transition-colors"
-            :class="isDarkTheme ? 'bg-[#4a9eff] hover:bg-[#3a8eef]' : 'bg-blue-500 hover:bg-blue-600'"
+            :class="isDarkTheme ? 'bg-[#27272A] hover:bg-[#3F3F46]' : 'bg-[#18181B] hover:bg-[#27272A]'"
           >
             刷新
           </button>
@@ -358,7 +358,7 @@ onUnmounted(() => {
       <div
         v-else-if="!adminSession.loggedIn"
         class="max-w-md mx-auto mt-16 p-6 rounded-xl"
-        :class="isDarkTheme ? 'bg-[#2d2d44] border border-gray-700/50' : 'bg-white border border-gray-200 shadow-sm'"
+        :class="isDarkTheme ? 'bg-[#27272A] border border-gray-700/50' : 'bg-white border border-gray-200 shadow-sm'"
       >
         <h2 class="text-xl font-semibold mb-2" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">管理员登录</h2>
         <p class="text-sm mb-6" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">登录后可查看监控、日志和用户管理数据。</p>
@@ -369,7 +369,7 @@ onUnmounted(() => {
               v-model="loginForm.username"
               type="text"
               class="w-full px-3 py-2 rounded border outline-none"
-              :class="isDarkTheme ? 'bg-[#1a1a2e] border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
+              :class="isDarkTheme ? 'bg-[#18181B] border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
             >
           </div>
           <div>
@@ -378,14 +378,14 @@ onUnmounted(() => {
               v-model="loginForm.password"
               type="password"
               class="w-full px-3 py-2 rounded border outline-none"
-              :class="isDarkTheme ? 'bg-[#1a1a2e] border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
+              :class="isDarkTheme ? 'bg-[#18181B] border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
             >
           </div>
           <button
             type="submit"
             class="w-full py-2 rounded text-white font-medium"
             :disabled="isSubmitting"
-            :class="isDarkTheme ? 'bg-[#4a9eff] hover:bg-[#3a8eef] disabled:opacity-60' : 'bg-blue-500 hover:bg-blue-600 disabled:opacity-60'"
+            :class="isDarkTheme ? 'bg-[#27272A] hover:bg-[#3F3F46] disabled:opacity-60' : 'bg-[#18181B] hover:bg-[#27272A] disabled:opacity-60'"
           >
             登录
           </button>
@@ -394,15 +394,15 @@ onUnmounted(() => {
 
       <div v-else class="space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
+          <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white border border-gray-200'">
             <p class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">在线用户</p>
             <p class="text-2xl font-semibold mt-1" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ onlineCount }}</p>
           </div>
-          <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
+          <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white border border-gray-200'">
             <p class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">用户总数</p>
             <p class="text-2xl font-semibold mt-1" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ users.length }}</p>
           </div>
-          <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
+          <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white border border-gray-200'">
             <p class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">已封禁</p>
             <p class="text-2xl font-semibold mt-1" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ bannedCount }}</p>
           </div>
@@ -412,24 +412,24 @@ onUnmounted(() => {
           <div class="xl:col-span-1 space-y-4 overflow-y-auto">
             <h2 class="text-sm font-medium" :class="isDarkTheme ? 'text-gray-300' : 'text-gray-700'">系统资源监控</h2>
 
-            <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
+            <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white border border-gray-200'">
               <div class="flex items-center justify-between mb-3">
                 <span class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">CPU 使用率</span>
                 <span class="text-lg font-semibold" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ metrics ? metrics.cpuUsage.toFixed(1) : '--' }}%</span>
               </div>
               <div class="w-full h-2 rounded-full overflow-hidden" :class="isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'">
-                <div class="h-full transition-all duration-500 rounded-full" :class="metrics && metrics.cpuUsage > 80 ? 'bg-red-500' : (isDarkTheme ? 'bg-[#4a9eff]' : 'bg-blue-500')" :style="{ width: (metrics ? metrics.cpuUsage : 0) + '%' }"></div>
+                <div class="h-full transition-all duration-500 rounded-full" :class="metrics && metrics.cpuUsage > 80 ? 'bg-red-500' : (isDarkTheme ? 'bg-[#525252]' : 'bg-[#18181B]')" :style="{ width: (metrics ? metrics.cpuUsage : 0) + '%' }"></div>
               </div>
               <p class="text-xs mt-2" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">核心数: {{ metrics ? metrics.cpuCores : '--' }}</p>
             </div>
 
-            <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
+            <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white border border-gray-200'">
               <div class="flex items-center justify-between mb-3">
                 <span class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">内存使用率</span>
                 <span class="text-lg font-semibold" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ metrics ? metrics.memoryUsage.toFixed(1) : '--' }}%</span>
               </div>
               <div class="w-full h-2 rounded-full overflow-hidden" :class="isDarkTheme ? 'bg-gray-700' : 'bg-gray-200'">
-                <div class="h-full transition-all duration-500 rounded-full" :class="metrics && metrics.memoryUsage > 80 ? 'bg-red-500' : (isDarkTheme ? 'bg-[#4a9eff]' : 'bg-blue-500')" :style="{ width: (metrics ? metrics.memoryUsage : 0) + '%' }"></div>
+                <div class="h-full transition-all duration-500 rounded-full" :class="metrics && metrics.memoryUsage > 80 ? 'bg-red-500' : (isDarkTheme ? 'bg-[#525252]' : 'bg-[#18181B]')" :style="{ width: (metrics ? metrics.memoryUsage : 0) + '%' }"></div>
               </div>
               <div class="flex justify-between text-xs mt-2" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
                 <span>已用: {{ metrics ? formatMemory(metrics.usedMemory) : '--' }}</span>
@@ -437,7 +437,7 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#2d2d44]' : 'bg-white border border-gray-200'">
+            <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white border border-gray-200'">
               <span class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">系统运行时间</span>
               <p class="text-lg font-semibold mt-1" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ metrics ? formatUptime(metrics.uptime) : '--' }}</p>
             </div>
@@ -449,10 +449,10 @@ onUnmounted(() => {
                 <h2 class="text-sm font-medium" :class="isDarkTheme ? 'text-gray-300' : 'text-gray-700'">用户管理</h2>
                 <span class="text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">在线状态按实时连接计算</span>
               </div>
-              <div class="rounded-lg overflow-hidden" :class="isDarkTheme ? 'bg-[#16162a] border border-gray-700/50' : 'bg-white border border-gray-200'">
+              <div class="rounded-lg overflow-hidden" :class="isDarkTheme ? 'bg-[#1C1C1C] border border-gray-700/50' : 'bg-white border border-gray-200'">
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
-                    <thead :class="isDarkTheme ? 'text-gray-400 bg-[#202038]' : 'text-gray-500 bg-gray-50'">
+                    <thead :class="isDarkTheme ? 'text-gray-400 bg-[#27272A]' : 'text-gray-500 bg-gray-50'">
                       <tr>
                         <th class="px-4 py-3 text-left">用户</th>
                         <th class="px-4 py-3 text-left">状态</th>
@@ -474,7 +474,7 @@ onUnmounted(() => {
                               v-model="renameDrafts[adminUser.userId]"
                               type="text"
                               class="w-full px-3 py-2 rounded border outline-none"
-                              :class="isDarkTheme ? 'bg-[#1a1a2e] border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
+                              :class="isDarkTheme ? 'bg-[#18181B] border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
                             >
                           </div>
                         </td>
@@ -499,7 +499,7 @@ onUnmounted(() => {
                             rows="2"
                             placeholder="可选：填写封禁原因"
                             class="w-full px-3 py-2 rounded border outline-none resize-none"
-                            :class="isDarkTheme ? 'bg-[#1a1a2e] border-gray-600 text-white placeholder:text-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'"
+                            :class="isDarkTheme ? 'bg-[#18181B] border-gray-600 text-white placeholder:text-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'"
                           ></textarea>
                         </td>
                         <td class="px-4 py-3 align-top">
@@ -508,7 +508,7 @@ onUnmounted(() => {
                               @click="handleRenameUser(adminUser)"
                               class="px-3 py-2 rounded text-sm transition-colors"
                               :disabled="isSubmitting"
-                              :class="isDarkTheme ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-60' : 'bg-blue-100 text-blue-600 hover:bg-blue-200 disabled:opacity-60'"
+                              :class="isDarkTheme ? 'bg-[#18181B]/20 text-gray-400 hover:bg-[#18181B]/30 disabled:opacity-60' : 'bg-gray-100 text-[#18181B] hover:bg-gray-200 disabled:opacity-60'"
                             >
                               修改用户名
                             </button>
@@ -551,7 +551,7 @@ onUnmounted(() => {
                 </button>
               </div>
 
-              <div class="rounded-lg overflow-hidden flex flex-col h-[420px]" :class="isDarkTheme ? 'bg-[#16162a] border border-gray-700/50' : 'bg-white border border-gray-200'">
+              <div class="rounded-lg overflow-hidden flex flex-col h-[420px]" :class="isDarkTheme ? 'bg-[#1C1C1C] border border-gray-700/50' : 'bg-white border border-gray-200'">
                 <div class="flex items-center gap-4 px-4 py-2 border-b text-xs" :class="isDarkTheme ? 'border-gray-700/50 text-gray-500' : 'border-gray-200 text-gray-500'">
                   <span class="w-16">级别</span>
                   <span class="w-24">时间</span>

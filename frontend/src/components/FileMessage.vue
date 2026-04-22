@@ -67,7 +67,7 @@ const handlePreview = () => {
     <!-- 图片文件 -->
     <div v-if="imageMessage" class="inline-flex max-w-full flex-col items-start gap-2">
       <div class="group relative overflow-hidden rounded-[24px] border shadow-sm ring-1 ring-inset transition-all duration-300 hover:scale-[1.02] hover:shadow-md"
-        :class="isDark ? 'border-slate-700/80 bg-slate-900/70 ring-white/10' : 'border-slate-200 bg-white ring-slate-200/70'">
+        :class="isDark ? 'border-gray-700/80 bg-gray-900/70 ring-white/10' : 'border-gray-200 bg-white ring-gray-200/70'">
         <img
           :src="props.fileUrl"
           :alt="fileName"
@@ -89,7 +89,7 @@ const handlePreview = () => {
           <button
             type="button"
             class="rounded-full px-2.5 py-1 text-[11px] opacity-0 shadow-sm transition-all group-hover:opacity-100"
-            :class="isDark ? 'bg-slate-900/80 text-white hover:bg-slate-900' : 'bg-white/90 text-slate-700 hover:bg-white'"
+            :class="isDark ? 'bg-gray-900/80 text-white hover:bg-gray-900' : 'bg-white/90 text-gray-700 hover:bg-white'"
             @click="handleDownload"
             title="下载"
           >
@@ -102,7 +102,7 @@ const handlePreview = () => {
           <button
             type="button"
             class="rounded-full px-2.5 py-1 text-[11px] opacity-0 shadow-sm transition-all group-hover:opacity-100"
-            :class="isDark ? 'bg-slate-900/80 text-white hover:bg-slate-900' : 'bg-white/90 text-slate-700 hover:bg-white'"
+            :class="isDark ? 'bg-gray-900/80 text-white hover:bg-gray-900' : 'bg-white/90 text-gray-700 hover:bg-white'"
             @click="handlePreview"
             title="预览"
           >
@@ -118,7 +118,7 @@ const handlePreview = () => {
     <!-- 视频文件 -->
     <div v-else-if="videoMessage" class="inline-flex max-w-full flex-col items-start gap-2">
       <div class="relative overflow-hidden rounded-[16px] border shadow-sm ring-1 ring-inset"
-        :class="isDark ? 'border-slate-700/80 bg-slate-900/70 ring-white/10' : 'border-slate-200 bg-white ring-slate-200/70'">
+        :class="isDark ? 'border-gray-700/80 bg-gray-900/70 ring-white/10' : 'border-gray-200 bg-white ring-gray-200/70'">
         <video
           :src="props.fileUrl"
           class="block max-h-[300px] max-w-[260px] sm:max-w-[320px] object-cover"

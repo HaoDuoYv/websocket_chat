@@ -75,7 +75,7 @@ const canSend = computed(() => {
 })
 
 const getAvatarColor = (userId: string) => {
-  const colors = ['#0891B2', '#0EA5E9', '#10B981', '#6366F1', '#64748B']
+  const colors = ['#18181B', '#3F3F46', '#52525B', '#71717A', '#A1A1AA', '#27272A', '#525252', '#737373']
   let hash = 0
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash)
@@ -412,7 +412,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
 </script>
 
 <template>
-  <div class="flex h-screen" :class="isDarkTheme ? 'bg-[#0F172A]' : 'bg-white'">
+  <div class="flex h-screen" :class="isDarkTheme ? 'bg-[#18181B]' : 'bg-white'">
     <div
       class="relative flex-1 flex flex-col"
       @dragenter="handleDragEnter"
@@ -425,7 +425,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
           <button
             @click="handleBack"
             class="w-9 h-9 flex items-center justify-center transition-colors"
-            :class="isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'"
+            :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -441,8 +441,8 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             </div>
             <div>
               <h1 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ roomTitle }}</h1>
-              <p class="text-xs text-[#22C55E] flex items-center gap-1">
-                <span class="w-1.5 h-1.5 bg-[#22C55E] rounded-full"></span>
+              <p class="text-xs text-[#737373] flex items-center gap-1">
+                <span class="w-1.5 h-1.5 bg-[#737373] rounded-full"></span>
                 {{ onlineMemberCount }} 人在线
               </p>
             </div>
@@ -453,7 +453,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
           <button
             @click="showProjectNotice"
             class="w-9 h-9 flex items-center justify-center transition-colors"
-            :class="isDarkTheme ? 'text-cyan-400 hover:text-cyan-300' : 'text-[#0891B2] hover:text-[#0e7490]'"
+            :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-[#18181B] hover:text-[#27272A]'"
             title="关于本项目"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -485,7 +485,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             </svg>
           </button>
 
-          <button class="w-9 h-9 flex items-center justify-center transition-colors" :class="isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'">
+          <button class="w-9 h-9 flex items-center justify-center transition-colors" :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="1"/>
               <circle cx="19" cy="12" r="1"/>
@@ -497,7 +497,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
 
       <div ref="messagesContainer" class="flex-1 overflow-y-auto px-6 py-6">
         <div v-if="roomMessages.length === 0" class="flex flex-col items-center justify-center h-full" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">
-          <div class="w-14 h-14 bg-[#0891B2] flex items-center justify-center mb-4">
+          <div class="w-14 h-14 bg-[#18181B] flex items-center justify-center mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
@@ -538,7 +538,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
                   :class="[
                     isImageMessage(message) ? 'px-1 py-1' : 'px-4 py-2 text-sm',
                     String(message.senderId) === user?.userId
-                      ? 'bg-[#0891B2] text-white'
+                      ? 'bg-[#18181B] text-white'
                       : (isDarkTheme ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700')
                   ]"
                 >
@@ -623,7 +623,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
           <button
             @click="showEmojiPicker = !showEmojiPicker"
             class="w-8 h-8 flex items-center justify-center transition-colors"
-            :class="isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'"
+            :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/>
@@ -648,7 +648,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
               @keyup.enter="handleSendMessage"
               type="text"
               placeholder="输入消息"
-              class="w-full px-0 py-2 bg-transparent border-0 border-b text-sm focus:outline-none focus:border-[#0891B2] transition-colors"
+              class="w-full px-0 py-2 bg-transparent border-0 border-b text-sm focus:outline-none focus:border-[#18181B] transition-colors"
               :class="isDarkTheme ? 'border-gray-700 text-gray-200 placeholder-gray-500' : 'border-gray-200 text-gray-700 placeholder-gray-400'"
             />
           </div>
@@ -656,7 +656,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
           <button
             @click="handleSendMessage"
             :disabled="!canSend"
-            class="w-8 h-8 bg-[#0891B2] hover:bg-[#0E7490] text-white flex items-center justify-center transition-colors"
+            class="w-8 h-8 bg-[#18181B] hover:bg-[#27272A] text-white flex items-center justify-center transition-colors"
             :class="isDarkTheme ? 'disabled:bg-gray-800' : 'disabled:bg-gray-200'"
           >
             <svg v-if="!isSendingFiles" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -674,7 +674,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
         v-if="isSendingFiles"
         class="absolute inset-0 z-40 flex items-center justify-center bg-black/25 backdrop-blur-sm"
       >
-        <div class="w-80 rounded-2xl border px-5 py-4" :class="isDarkTheme ? 'border-gray-700 bg-slate-900 text-slate-100' : 'border-gray-200 bg-white text-slate-800'">
+        <div class="w-80 rounded-2xl border px-5 py-4" :class="isDarkTheme ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-800'">
           <div class="flex items-center justify-between gap-3">
             <div>
               <p class="text-sm font-medium">正在发送附件</p>
@@ -682,19 +682,19 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             </div>
             <span class="text-sm font-medium">{{ uploadProgress }}%</span>
           </div>
-          <div class="mt-3 h-2 overflow-hidden rounded-full" :class="isDarkTheme ? 'bg-slate-800' : 'bg-slate-200'">
-            <div class="h-full rounded-full bg-[#0891B2] transition-all duration-200" :style="{ width: `${uploadProgress}%` }"></div>
+          <div class="mt-3 h-2 overflow-hidden rounded-full" :class="isDarkTheme ? 'bg-gray-800' : 'bg-gray-200'">
+            <div class="h-full rounded-full bg-[#18181B] transition-all duration-200" :style="{ width: `${uploadProgress}%` }"></div>
           </div>
         </div>
       </div>
 
       <div
         v-if="isDraggingFile"
-        class="absolute inset-0 z-40 flex items-center justify-center bg-[#0891B2]/10 backdrop-blur-sm"
+        class="absolute inset-0 z-40 flex items-center justify-center bg-[#18181B]/10 backdrop-blur-sm"
       >
         <div
           class="rounded-2xl border-2 border-dashed px-8 py-10 text-center"
-          :class="isDarkTheme ? 'border-[#38BDF8] bg-slate-900/80 text-slate-100' : 'border-[#0891B2] bg-white/95 text-slate-700'"
+          :class="isDarkTheme ? 'border-[#525252] bg-gray-900/80 text-gray-100' : 'border-[#18181B] bg-white/95 text-gray-700'"
         >
           <p class="text-base font-medium">松开发送图片或文件</p>
           <p class="mt-2 text-sm opacity-70">文件会先进入输入框，点击发送后再上传</p>
@@ -702,7 +702,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
       </div>
     </div>
 
-    <aside class="w-60 border-l hidden lg:flex flex-col" :class="isDarkTheme ? 'border-gray-800 bg-[#1E293B]' : 'border-gray-100 bg-white'">
+    <aside class="w-60 border-l hidden lg:flex flex-col" :class="isDarkTheme ? 'border-gray-800 bg-[#27272A]' : 'border-gray-100 bg-white'">
       <div class="px-5 py-4 border-b" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
         <h3 class="text-sm font-medium" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">在线成员</h3>
         <p class="text-xs mt-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">{{ onlineUsers.length }} 人在线</p>
@@ -722,11 +722,11 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             >
               {{ getAvatarText(onlineUser.username) }}
             </div>
-            <div class="absolute bottom-0 right-0 w-2 h-2 bg-[#22C55E] border-2 rounded-full" :class="isDarkTheme ? 'border-gray-800' : 'border-white'"></div>
+            <div class="absolute bottom-0 right-0 w-2 h-2 bg-[#737373] border-2 rounded-full" :class="isDarkTheme ? 'border-gray-800' : 'border-white'"></div>
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm truncate" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ onlineUser.username }}</p>
-            <p class="text-xs text-[#22C55E]">在线</p>
+            <p class="text-xs text-[#737373]">在线</p>
           </div>
         </div>
       </div>
@@ -739,11 +739,11 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
       class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
       @click.self="closeProjectNotice"
     >
-      <div class="w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl" :class="isDarkTheme ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-800'">
-        <div class="border-b px-6 py-5" :class="isDarkTheme ? 'border-slate-800' : 'border-slate-100'">
-          <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#0891B2]">关于本项目</p>
+      <div class="w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl" :class="isDarkTheme ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-800'">
+        <div class="border-b px-6 py-5" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
+          <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#18181B]">关于本项目</p>
           <h2 class="mt-2 text-2xl font-semibold">{{ projectNotice.title }}</h2>
-          <p class="mt-3 text-sm leading-6" :class="isDarkTheme ? 'text-slate-300' : 'text-slate-600'">{{ projectNotice.summary }}</p>
+          <p class="mt-3 text-sm leading-6" :class="isDarkTheme ? 'text-gray-300' : 'text-gray-600'">{{ projectNotice.summary }}</p>
         </div>
         <div class="px-6 py-5">
           <div class="space-y-3">
@@ -751,14 +751,14 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
               v-for="(item, index) in projectNotice.highlights"
               :key="item"
               class="flex items-start gap-3 rounded-2xl px-4 py-3"
-              :class="isDarkTheme ? 'bg-slate-800/70' : 'bg-slate-50'"
+              :class="isDarkTheme ? 'bg-gray-800/70' : 'bg-gray-50'"
             >
-              <span class="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#0891B2] text-xs font-semibold text-white">{{ index + 1 }}</span>
+              <span class="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#18181B] text-xs font-semibold text-white">{{ index + 1 }}</span>
               <p class="text-sm leading-6">{{ item }}</p>
             </div>
           </div>
 
-          <div class="mt-5 rounded-2xl border px-4 py-4" :class="isDarkTheme ? 'border-slate-700 bg-slate-950/40' : 'border-slate-200 bg-white'">
+          <div class="mt-5 rounded-2xl border px-4 py-4" :class="isDarkTheme ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-white'">
             <p class="text-sm font-medium">相关链接</p>
             <div class="mt-3 flex flex-col gap-2">
               <a
@@ -767,7 +767,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
                 :href="link.href"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center gap-2 text-sm text-[#0891B2] hover:underline break-all"
+                class="inline-flex items-center gap-2 text-sm text-[#525252] hover:text-[#18181B] hover:underline break-all"
               >
                 <span>{{ link.label }}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -778,18 +778,18 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             </div>
           </div>
         </div>
-        <div class="flex items-center justify-end gap-3 border-t px-6 py-4" :class="isDarkTheme ? 'border-slate-800 bg-slate-950/40' : 'border-slate-100 bg-slate-50'">
+        <div class="flex items-center justify-end gap-3 border-t px-6 py-4" :class="isDarkTheme ? 'border-gray-800 bg-gray-950/40' : 'border-gray-100 bg-gray-50'">
           <button
             type="button"
             class="rounded-xl px-4 py-2 text-sm transition-colors"
-            :class="isDarkTheme ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-white'"
+            :class="isDarkTheme ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-white'"
             @click="closeProjectNotice"
           >
             关闭
           </button>
           <button
             type="button"
-            class="rounded-xl bg-[#0891B2] px-4 py-2 text-sm text-white transition-colors hover:bg-[#0e7490]"
+            class="rounded-xl bg-[#18181B] px-4 py-2 text-sm text-white transition-colors hover:bg-[#27272A]"
             @click="dismissProjectNotice"
           >
             今日不再提示

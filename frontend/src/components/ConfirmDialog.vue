@@ -21,7 +21,7 @@
         </button>
         <button
           @click="handleConfirm"
-          class="flex-1 px-4 py-2.5 bg-cyan-500 text-white text-sm font-medium rounded-xl hover:bg-cyan-600 transition-colors"
+          class="flex-1 px-4 py-2.5 bg-[#18181B] text-white text-sm font-medium rounded-xl hover:bg-[#27272A] transition-colors"
         >
           {{ confirmText }}
         </button>
