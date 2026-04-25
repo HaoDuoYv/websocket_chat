@@ -18,6 +18,21 @@ const routes = [
     name: 'admin',
     component: () => import('@/pages/AdminPage.vue'),
   },
+  {
+    path: '/apps',
+    name: 'apps',
+    component: () => import('@/pages/AppsPage.vue'),
+  },
+  {
+    path: '/gomoku',
+    name: 'gomoku-lobby',
+    component: () => import('@/pages/GomokuLobbyPage.vue'),
+  },
+  {
+    path: '/gomoku/:roomId',
+    name: 'gomoku-game',
+    component: () => import('@/pages/GomokuGamePage.vue'),
+  },
 ]
 
 // 创建路由实例

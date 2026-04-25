@@ -4,6 +4,7 @@ import com.chat.interceptor.AdminIpInterceptor;
 import com.chat.interceptor.AdminSessionInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -29,5 +30,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(adminSessionInterceptor)
                 .addPathPatterns("/api/admin/**")
                 .excludePathPatterns("/api/admin/health", "/api/admin/login");
+    }
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/apps")
+                .allowedOrigins("*")
+                .allowedMethods("GET");
     }
 }
