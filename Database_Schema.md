@@ -12,13 +12,21 @@
 
 ## 2. 表结构概览
 
-| 表名 | 描述 | 实体类 |
-|------|------|--------|
-| `users` | 用户信息表 | `User.java` |
-| `rooms` | 聊天房间表 | `Room.java` |
-| `room_members` | 房间成员关系表 | `RoomMember.java` |
-| `messages` | 消息记录表 | `Message.java` |
-| `user_remarks` | 用户备注表 | `UserRemark.java` |
+### 2.1 数据库持久化表
+
+| 表名 | 描述 | 实体类 | 存储方式 |
+|------|------|--------|----------|
+| `users` | 用户信息表 | `User.java` | SQLite 持久化 |
+| `rooms` | 聊天房间表 | `Room.java` | SQLite 持久化 |
+| `room_members` | 房间成员关系表 | `RoomMember.java` | SQLite 持久化 |
+| `messages` | 消息记录表 | `Message.java` | SQLite 持久化 |
+| `user_remarks` | 用户备注表 | `UserRemark.java` | SQLite 持久化 |
+
+### 2.2 内存实体（非数据库持久化）
+
+| 实体名 | 描述 | 实体类 | 存储方式 |
+|--------|------|--------|----------|
+| GomokuRoom | 五子棋房间 | `GomokuRoom.java` | ConcurrentHashMap（内存） |
 
 ## 3. 实体关系图
 
@@ -235,8 +243,8 @@ public class RoomMember {
 | `file_id` | VARCHAR(64) | NULL | 文件 ID（文件消息） |
 | `file_name` | VARCHAR(256) | NULL | 原始文件名（文件消息） |
 | `file_url` | VARCHAR(512) | NULL | 文件访问 URL（文件消息） |
-| `file_size` | BIGINT | NULL | 文件大小（字节） |
-| `file_type` | VARCHAR(32) | NULL | 文件 MIME 类型 |
+| `file_size` | BIGINT | NULL | 文件大小（字节）（文件消息） |
+| `file_type` | VARCHAR(32) | NULL | 文件 MIME 类型（文件消息） |
 
 **索引**:
 - PRIMARY KEY: `id`
@@ -340,39 +348,83 @@ public class UserRemark {
 }
 ```
 
-## 5. 表关系说明
+## 5. 五子棋内存实体（非数据库）
 
-### 5.1 用户与房间（User - Room）
+### 5.1 GomokuRoom（五子棋房间）
+
+五子棋游戏数据不持久化到数据库，全部保存在后端内存的 ConcurrentHashMap 中。服务器重启后所有对局数据丢失。
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `roomId` | String | 房间 ID（UUID） |
+| `name` | String | 房间名称 |
+| `password` | String? | 密码（可选，为空则公开） |
+| `owner` | String? | 房主用户 ID |
+| `blackPlayer` | String? | 黑方玩家用户 ID |
+| `whitePlayer` | String? | 白方玩家用户 ID |
+| `board` | int[][] | 15×15 二维数组（0=空位, 1=黑子, 2=白子） |
+| `status` | GameStatus | 游戏状态：WAITING / PLAYING / FINISHED |
+| `currentTurn` | 'black' \| 'white' | 当前轮到哪方落子 |
+| `moveCount` | int | 已落子总数 |
+| `winner` | String? | 获胜者用户 ID（FINISHED 时有值） |
+| `spectators` | Set\<String\> | 观战者用户 ID 集合 |
+| `createdAt` | long | 创建时间戳 |
+
+**枚举定义**:
+
+```java
+enum GameStatus {
+    WAITING,   // 等待玩家加入
+    PLAYING,   // 游戏进行中
+    FINISHED   // 对局结束（胜负已分或认输）
+}
+
+enum GomokuPlayer {
+    BLACK,       // 黑方
+    WHITE,       // 白方
+    SPECTATOR    // 观战者
+}
+```
+
+**对应实体类**: [GomokuRoom.java](backend/src/main/java/com/chat/entity/GomokuRoom.java)
+
+**管理服务**: [GomokuGameService.java](backend/src/main/java/com/chat/service/GomokuGameService.java)
+
+**WebSocket 处理器**: [GomokuWebSocketHandler.java](backend/src/main/java/com/chat/handler/GomokuWebSocketHandler.java)
+
+## 6. 表关系说明
+
+### 6.1 用户与房间（User - Room）
 
 - **一对多关系**: 一个用户可以创建/拥有多个群聊房间
 - `rooms.owner_id` → `users.id`
 - 私聊房间（`type = 'private'`）的 `owner_id` 为 NULL
 
-### 5.2 用户与房间成员（User - RoomMember）
+### 6.2 用户与房间成员（User - RoomMember）
 
 - **多对多关系**: 通过 `room_members` 表实现
 - 一个用户可以加入多个房间
 - 一个房间可以包含多个成员
 
-### 5.3 房间与消息（Room - Message）
+### 6.3 房间与消息（Room - Message）
 
 - **一对多关系**: 一个房间包含多条消息
 - `messages.room_id` → `rooms.id`
 - 消息按 `seq` 字段排序，保证顺序性
 
-### 5.4 用户与消息（User - Message）
+### 6.4 用户与消息（User - Message）
 
 - **一对多关系**: 一个用户可以发送多条消息
 - `messages.sender_id` → `users.id`
 
-### 5.5 用户与备注（User - UserRemark）
+### 6.5 用户与备注（User - UserRemark）
 
 - **一对多关系**: 一个用户可以设置多个备注
 - `user_remarks.user_id` → `users.id`（设置者）
 - `user_remarks.target_user_id` → `users.id`（被备注者）
 - 复合唯一约束保证每个用户对同一目标用户只能有一个备注
 
-## 6. 数据访问层（Repository）
+## 7. 数据访问层（Repository）
 
 | Repository | 对应表 | 主要方法 |
 |------------|--------|----------|
@@ -382,9 +434,9 @@ public class UserRemark {
 | `MessageRepository` | `messages` | `findByRoomId()`, `findByRoomIdAndSeqGreaterThan()` |
 | `UserRemarkRepository` | `user_remarks` | `findByUserId()`, `findByUserIdAndTargetUserId()` |
 
-## 7. ID 生成策略
+## 8. ID 生成策略
 
-### 7.1 Snowflake ID（64 位）
+### 8.1 Snowflake ID（64 位）
 
 用于 `users`、`rooms`、`user_remarks` 表的主键。
 
@@ -392,7 +444,7 @@ public class UserRemark {
 - **特点**: 全局唯一、趋势递增、高性能
 - **实现**: [SnowflakeIdGenerator.java](backend/src/main/java/com/chat/utils/SnowflakeIdGenerator.java)
 
-### 7.2 UUID（36 位字符串）
+### 8.2 UUID（36 位字符串）
 
 用于 `messages` 表的主键。
 
@@ -400,7 +452,7 @@ public class UserRemark {
 - **特点**: 全局唯一、无序
 - **适用场景**: 消息 ID 不需要排序，使用 UUID 更简单
 
-## 8. 数据库配置
+## 9. 数据库配置
 
 ```properties
 spring.datasource.url=jdbc:sqlite:./data/chat.db
@@ -414,7 +466,7 @@ spring.jpa.hibernate.ddl-auto=update
 - SQLite 不支持复杂的外键约束，Hibernate 会忽略外键定义
 - 数据库文件存储在 `backend/data/chat.db`
 
-## 9. 注意事项
+## 10. 注意事项
 
 1. **Long 类型序列化**: JavaScript Number 类型无法精确表示 64 位整数，所有 Long 字段使用 `@JsonSerialize(using = ToStringSerializer.class)` 序列化为字符串
 
@@ -426,7 +478,9 @@ spring.jpa.hibernate.ddl-auto=update
 
 5. **SQLite 限制**: SQLite 不支持复杂的 ALTER TABLE 操作，表结构变更可能需要重建数据库
 
-## 10. 相关文档
+6. **五子棋数据不持久化**: 所有 GomokuRoom 数据仅存于 JVM 内存（ConcurrentHashMap），服务重启后全部丢失
+
+## 11. 相关文档
 
 - [README.md](README.md) - 项目概述
 - [Technical_Architecture.md](Technical_Architecture.md) - 技术架构
