@@ -143,7 +143,7 @@ onMounted(fetchApps)
         <div
           v-for="app in apps"
           :key="app.id"
-          class="rounded-2xl border p-5 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+          class="rounded-2xl border p-5 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 flex flex-col"
           :class="isDark ? 'border-gray-700 bg-[#27272A] hover:border-gray-600' : 'border-gray-200 bg-white hover:border-gray-300'"
         >
           <!-- 卡片头部：图标 + 标题 + 状态 -->
@@ -164,12 +164,12 @@ onMounted(fetchApps)
           </div>
 
           <!-- 描述 -->
-          <p class="text-xs leading-relaxed line-clamp-2 mb-4" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+          <p class="text-xs leading-relaxed line-clamp-2 mb-4 flex-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
             {{ app.text }}
           </p>
 
           <!-- 操作按钮 -->
-          <div class="flex gap-2">
+          <div class="flex gap-2 mt-auto">
             <button
               @click="openDetail(app)"
               class="flex-1 px-3 py-2 text-xs font-medium rounded-xl border transition-colors"
