@@ -9,9 +9,7 @@ export interface AppConfig {
   show: boolean
   techStack?: string[]
   usageScenario?: string
-  description?: string
   descriptionMd?: string
-  status?: 'active' | 'developing' | 'planned'
 }
 
 export const appsConfig: AppConfig[] = [
@@ -28,9 +26,20 @@ export const appsConfig: AppConfig[] = [
     show: false,
     techStack: ['Vue 3', 'WebSocket', 'Spring Boot'],
     usageScenario: '实时对战与观战',
-    description: '基于WebSocket的实时五子棋对战游戏，支持创建房间、密码保护、观战、房间聊天。',
-    descriptionMd: '/md/gomoku.md',
-    status: 'active'
+    descriptionMd: '/md/gomoku.md'
+  },
+  {
+    id: 'play-cs',
+    go: '🎮 前往',
+    img: '/img/play-cs.svg',
+    title: 'PLAY-CS 1.6',
+    subtitle: '浏览器直接开打，无需注册下载',
+    text: '网页版 CS 1.6 多人在线对战游戏',
+    url: 'https://play-cs.com/zh/servers',
+    show: true,
+    techStack: ['WebAssembly', 'WebGL', 'Browser'],
+    usageScenario: '休闲射击与怀旧对战',
+    descriptionMd: '/md/play-cs.md'
   }
 
 ]

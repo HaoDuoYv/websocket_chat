@@ -26,15 +26,6 @@
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <h3 class="text-lg font-semibold truncate">{{ app?.title }}</h3>
-            <span
-              v-if="app?.status"
-              :class="[
-                'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0',
-                statusClass
-              ]"
-            >
-              {{ statusLabel }}
-            </span>
           </div>
           <p
             :class="[
@@ -58,8 +49,8 @@
 
       <!-- Body -->
       <div class="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
-        <!-- Description: Markdown or fallback plain text -->
-        <div v-if="app?.description || app?.descriptionMd">
+        <!-- Description: Markdown -->
+        <div v-if="app?.descriptionMd">
           <h4
             :class="[
               'text-sm font-medium mb-1.5',
@@ -74,15 +65,6 @@
             :class="isDark ? 'prose-invert' : ''"
             v-html="mdHtml"
           />
-          <p
-            v-else
-            :class="[
-              'text-sm leading-relaxed',
-              isDark ? 'text-gray-400' : 'text-gray-600'
-            ]"
-          >
-            {{ app.description }}
-          </p>
         </div>
 
         <!-- Tech Stack -->
@@ -165,7 +147,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import type { AppConfig } from '@/config/apps'
 
@@ -182,36 +164,6 @@ const emit = defineEmits<{
 }>()
 
 const mdHtml = ref('')
-
-const statusMap: Record<string, { label: string; class: string; darkClass: string }> = {
-  active: {
-    label: '已完成',
-    class: 'bg-green-100 text-green-700',
-    darkClass: 'bg-green-900/30 text-green-400'
-  },
-  developing: {
-    label: '开发中',
-    class: 'bg-yellow-100 text-yellow-700',
-    darkClass: 'bg-yellow-900/30 text-yellow-400'
-  },
-  planned: {
-    label: '规划中',
-    class: 'bg-gray-100 text-gray-600',
-    darkClass: 'bg-gray-700/50 text-gray-400'
-  }
-}
-
-const statusLabel = computed(() => {
-  const status = props.app?.status
-  return status ? statusMap[status]?.label ?? '' : ''
-})
-
-const statusClass = computed(() => {
-  const status = props.app?.status
-  if (!status) return ''
-  const entry = statusMap[status]
-  return props.isDark ? entry?.darkClass ?? '' : entry?.class ?? ''
-})
 
 async function loadMarkdown(url: string) {
   try {

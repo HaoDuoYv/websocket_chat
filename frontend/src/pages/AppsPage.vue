@@ -14,35 +14,6 @@ const selectedApp = ref<AppConfig | null>(null)
 const isDetailOpen = ref(false)
 const isDark = ref(localStorage.getItem('theme') === 'dark')
 
-const statusMap: Record<string, { label: string; class: string; darkClass: string }> = {
-  active: {
-    label: '已完成',
-    class: 'bg-green-100 text-green-700',
-    darkClass: 'bg-green-900/30 text-green-400'
-  },
-  developing: {
-    label: '开发中',
-    class: 'bg-yellow-100 text-yellow-700',
-    darkClass: 'bg-yellow-900/30 text-yellow-400'
-  },
-  planned: {
-    label: '规划中',
-    class: 'bg-gray-100 text-gray-600',
-    darkClass: 'bg-gray-700/50 text-gray-400'
-  }
-}
-
-function getStatusClass(status?: string): string {
-  if (!status) return ''
-  const entry = statusMap[status]
-  return isDark.value ? entry?.darkClass ?? '' : entry?.class ?? ''
-}
-
-function getStatusLabel(status?: string): string {
-  if (!status) return ''
-  return statusMap[status]?.label ?? ''
-}
-
 async function fetchApps() {
   isLoading.value = true
   error.value = ''
@@ -185,12 +156,6 @@ onMounted(fetchApps)
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
                 <h3 class="font-medium text-sm truncate">{{ app.title }}</h3>
-                <span
-                  v-if="app.status"
-                  :class="['inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0', getStatusClass(app.status)]"
-                >
-                  {{ getStatusLabel(app.status) }}
-                </span>
               </div>
               <p class="text-xs mt-0.5 truncate" :class="isDark ? 'text-gray-500' : 'text-gray-400'">
                 {{ app.subtitle }}

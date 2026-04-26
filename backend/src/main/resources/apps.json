@@ -1,1 +1,36 @@
-[{"id": "gomoku", "title": "五子棋对战", "subtitle": "霸王龙小时候吵着要玩", "text": "基于WebSocket的实时五子棋对战", "url": "/gomoku", "img": "/img/gomoku.svg", "techStack": ["Vue 3", "WebSocket", "Spring Boot"], "usageScenario": "实时对战与观战", "description": "基于WebSocket的实时五子棋对战游戏，支持创建房间、密码保护、观战、房间聊天。", "status": "active"}]
+[
+    {
+        "id": "gomoku",
+        "title": "五子棋对战",
+        "subtitle": "霸王龙小时候吵着要玩",
+        "text": "基于WebSocket的实时五子棋对战",
+        "url": "/gomoku",
+        "img": "/img/gomoku.svg",
+        "techStack": [
+            "Vue 3",
+            "WebSocket",
+            "Spring Boot"
+        ],
+        "usageScenario": "实时对战与观战",
+        "description": "基于WebSocket的实时五子棋对战游戏，支持创建房间、密码保护、观战、房间聊天。",
+        "status": "active",
+        "descriptionMd": "/md/gomoku.md"
+    },
+    {
+        "id": "play-cs",
+        "title": "PLAY-CS 1.6",
+        "subtitle": "浏览器直接开打，无需注册下载",
+        "text": "网页版 CS 1.6 多人在线对战游戏",
+        "url": "https://play-cs.com/zh/servers",
+        "img": "/img/play-cs.svg",
+        "techStack": [
+            "WebAssembly",
+            "WebGL",
+            "Browser"
+        ],
+        "usageScenario": "休闲射击与怀旧对战",
+        "description": "无需注册、无需下载，直接在浏览器中体验经典 CS 1.6 对战乐趣。",
+        "status": "active",
+        "descriptionMd": "/md/play-cs.md"
+    }
+]
