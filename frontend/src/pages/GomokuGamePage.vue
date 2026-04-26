@@ -14,7 +14,7 @@ const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 
 const {
   isConnected, gameState, chatMessages,
-  myUserId, opponentDisconnected, opponentLeft, moveRejected,
+  myUserId, opponentDisconnected, opponentLeft, moveRejected, joinFailed,
   restartRequest, restartRejected,
   connect, makeMove,
   requestRestart, respondRestart, leaveRoom, sendChat,
@@ -152,9 +152,19 @@ const canJoinAsPlayer = computed(() => {
   return !gameState.value.blackPlayer || !gameState.value.whitePlayer
 })
 
+const canStartGame = computed(() => {
+  if (!gameState.value || !isPlayer.value) return false
+  const hasBothPlayers = !!gameState.value.blackPlayer && !!gameState.value.whitePlayer
+  return hasBothPlayers && (gameState.value.status === 'FINISHED' || gameState.value.status === 'WAITING')
+})
+
 const handleJoinAsPlayer = () => {
   joinAsPlayer()
 }
+
+watch(joinFailed, (val) => {
+  if (val) router.push('/gomoku')
+})
 
 onMounted(() => {
   const userData = localStorage.getItem('user')
@@ -327,14 +337,14 @@ onUnmounted(() => {
           认输
         </button>
         <button
-          v-if="gameState?.status === 'FINISHED'"
+          v-if="canStartGame"
           @click="handleRequestRestart"
           class="px-3 py-1.5 text-xs font-medium border transition-colors"
           :class="isDarkTheme
             ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
             : 'border-gray-200 text-gray-600 hover:bg-gray-50'"
         >
-          再来一局
+          开始游戏
         </button>
         <button
           v-if="canJoinAsPlayer"

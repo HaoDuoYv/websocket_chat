@@ -176,13 +176,10 @@ public class GomokuGameService {
 
         room.removeSpectator(userId);
 
-        if ((room.getGameState() == GameState.WAITING || room.getGameState() == GameState.FINISHED)
+        if (room.getGameState() == GameState.WAITING
                 && room.getPlayer1Id() != null && room.getPlayer2Id() != null) {
             room.setGameState(GameState.PLAYING);
             room.setCurrentTurn(1);
-            room.setWinner(0);
-            room.setWinLine(null);
-            room.resetBoard();
         }
 
         room.updateActivity();

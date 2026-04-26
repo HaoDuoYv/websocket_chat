@@ -58,8 +58,8 @@
 
       <!-- Body -->
       <div class="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
-        <!-- Description -->
-        <div v-if="app?.description">
+        <!-- Description: Markdown or fallback plain text -->
+        <div v-if="app?.description || app?.descriptionMd">
           <h4
             :class="[
               'text-sm font-medium mb-1.5',
@@ -68,7 +68,14 @@
           >
             功能描述
           </h4>
+          <div
+            v-if="mdHtml"
+            class="md-content text-sm leading-relaxed prose-sm max-w-none"
+            :class="isDark ? 'prose-invert' : ''"
+            v-html="mdHtml"
+          />
           <p
+            v-else
             :class="[
               'text-sm leading-relaxed',
               isDark ? 'text-gray-400' : 'text-gray-600'
@@ -158,7 +165,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
+import { marked } from 'marked'
 import type { AppConfig } from '@/config/apps'
 
 interface Props {
@@ -172,6 +180,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
 }>()
+
+const mdHtml = ref('')
 
 const statusMap: Record<string, { label: string; class: string; darkClass: string }> = {
   active: {
@@ -203,6 +213,32 @@ const statusClass = computed(() => {
   return props.isDark ? entry?.darkClass ?? '' : entry?.class ?? ''
 })
 
+async function loadMarkdown(url: string) {
+  try {
+    const res = await fetch(url)
+    if (res.ok) {
+      const text = await res.text()
+      mdHtml.value = marked.parse(text) as string
+    } else {
+      mdHtml.value = ''
+    }
+  } catch {
+    mdHtml.value = ''
+  }
+}
+
+watch(
+  () => props.app,
+  (app) => {
+    if (app?.descriptionMd) {
+      loadMarkdown(app.descriptionMd)
+    } else {
+      mdHtml.value = ''
+    }
+  },
+  { immediate: true }
+)
+
 function handleClose() {
   emit('close')
 }
@@ -231,3 +267,42 @@ onUnmounted(() => {
   document.body.style.overflow = ''
 })
 </script>
+
+<style scoped>
+.md-content :deep(h2) {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+  margin-bottom: 0.375rem;
+}
+.md-content :deep(h3) {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-top: 0.625rem;
+  margin-bottom: 0.25rem;
+}
+.md-content :deep(p) {
+  margin-bottom: 0.5rem;
+}
+.md-content :deep(ul),
+.md-content :deep(ol) {
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.md-content :deep(li) {
+  margin-bottom: 0.125rem;
+}
+.md-content :deep(strong) {
+  font-weight: 600;
+}
+.md-content :deep(img) {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+}
+.md-content :deep(code) {
+  font-size: 0.8125em;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+</style>

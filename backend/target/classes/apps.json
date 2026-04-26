@@ -1,0 +1,1 @@
+[{"id": "gomoku", "title": "五子棋对战", "subtitle": "霸王龙小时候吵着要玩", "text": "基于WebSocket的实时五子棋对战", "url": "/gomoku", "img": "/img/gomoku.svg", "techStack": ["Vue 3", "WebSocket", "Spring Boot"], "usageScenario": "实时对战与观战", "description": "基于WebSocket的实时五子棋对战游戏，支持创建房间、密码保护、观战、房间聊天。", "status": "active"}]

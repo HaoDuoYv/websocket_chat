@@ -115,6 +115,7 @@ export function useGomokuWebSocket() {
   const opponentDisconnected = ref(false)
   const opponentLeft = ref(false)
   const moveRejected = ref<string>('')
+  const joinFailed = ref(false)
   const restartRejected = ref(false)
 
   let reconnectAttempts = 0
@@ -204,6 +205,7 @@ export function useGomokuWebSocket() {
     opponentDisconnected.value = false
     opponentLeft.value = false
     moveRejected.value = ''
+    joinFailed.value = false
     restartRejected.value = false
   }
 
@@ -352,10 +354,17 @@ export function useGomokuWebSocket() {
         }
         break
 
-      case 'game:rejoin:failed':
-        if (currentRoomId.value) {
-          spectateRoom(currentRoomId.value)
+      case 'game:room:state:update':
+        if (gameState.value && event.data) {
+          const updated = mapRoomState(event.data, myUserId.value)
+          gameState.value = { ...updated }
+          opponentLeft.value = false
+          opponentDisconnected.value = false
         }
+        break
+
+      case 'game:rejoin:failed':
+        joinFailed.value = true
         break
 
       case 'game:room:join:failed':
@@ -411,6 +420,7 @@ export function useGomokuWebSocket() {
     opponentDisconnected.value = false
     opponentLeft.value = false
     moveRejected.value = ''
+    joinFailed.value = false
     restartRejected.value = false
     currentRoomId.value = ''
   }
@@ -436,6 +446,7 @@ export function useGomokuWebSocket() {
     opponentDisconnected,
     opponentLeft,
     moveRejected,
+    joinFailed,
     restartRejected,
     connect,
     disconnect,

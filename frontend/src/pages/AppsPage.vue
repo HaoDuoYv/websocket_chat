@@ -77,7 +77,7 @@ function openUrl(url: string) {
 }
 
 function goBack() {
-  router.back()
+  router.push('/')
 }
 
 onMounted(fetchApps)

@@ -110,7 +110,7 @@ onUnmounted(() => {
     <header class="border-b px-6 py-5" :class="isDark ? 'border-gray-800' : 'border-gray-100'">
       <div class="max-w-7xl mx-auto flex items-center gap-4">
         <button
-          @click="router.back()"
+          @click="router.push('/apps')"
           class="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
           :class="isDark ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'"
         >

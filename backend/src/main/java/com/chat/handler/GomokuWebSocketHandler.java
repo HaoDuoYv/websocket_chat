@@ -597,6 +597,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                     "player", safeMap("userId", String.valueOf(userId), "username", username))));
 
             sendToSession(session.getId(), new Event("game:room:joined", buildRoomState(room)));
+
+            if (room.getPlayer1Id() != null && room.getPlayer2Id() != null) {
+                broadcastToRoom(roomId, new Event("game:room:state:update", buildRoomState(room)), session.getId());
+            }
+
             broadcastRoomListToLobby();
         } catch (RuntimeException e) {
             logger.error("观战者加入对局失败: {}", e.getMessage());
