@@ -32,5 +32,22 @@
         "description": "无需注册、无需下载，直接在浏览器中体验经典 CS 1.6 对战乐趣。",
         "status": "active",
         "descriptionMd": "/md/play-cs.md"
+    },
+    {
+        "id": "algorithm-visualizer",
+        "title": "Algorithm Visualizer",
+        "subtitle": "可视化算法，让代码动起来",
+        "text": "交互式算法可视化平台，涵盖回溯、动态规划、贪心等主流算法",
+        "url": "https://algorithm-visualizer.org/",
+        "img": "/img/algorithm-visualizer.svg",
+        "techStack": [
+            "React",
+            "Redux",
+            "Node.js"
+        ],
+        "usageScenario": "算法学习与教学演示",
+        "description": "可视化代码算法的交互式平台，内含多种算法并进行了可视化动画呈现。",
+        "status": "active",
+        "descriptionMd": "/md/algorithm-visualizer.md"
     }
 ]

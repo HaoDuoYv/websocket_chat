@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" rx="20" fill="#1a1a2e"/>
+  <rect x="8" y="8" width="112" height="112" rx="16" fill="#16213e"/>
+  <!-- Bar chart visualization -->
+  <rect x="24" y="72" width="12" height="32" rx="2" fill="#4ecca3"/>
+  <rect x="40" y="56" width="12" height="48" rx="2" fill="#4ecca3"/>
+  <rect x="56" y="40" width="12" height="64" rx="2" fill="#4ecca3"/>
+  <rect x="72" y="52" width="12" height="52" rx="2" fill="#4ecca3"/>
+  <rect x="88" y="32" width="12" height="72" rx="2" fill="#e94560"/>
+  <!-- Connection lines -->
+  <path d="M30 68 L46 52 L62 36 L78 48 L94 28" stroke="#4ecca3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+  <circle cx="30" cy="68" r="3" fill="#4ecca3"/>
+  <circle cx="46" cy="52" r="3" fill="#4ecca3"/>
+  <circle cx="62" cy="36" r="3" fill="#4ecca3"/>
+  <circle cx="78" cy="48" r="3" fill="#4ecca3"/>
+  <circle cx="94" cy="28" r="3" fill="#e94560"/>
+</svg>

@@ -40,6 +40,19 @@ export const appsConfig: AppConfig[] = [
     techStack: ['WebAssembly', 'WebGL', 'Browser'],
     usageScenario: '休闲射击与怀旧对战',
     descriptionMd: '/md/play-cs.md'
+  },
+  {
+    id: 'algorithm-visualizer',
+    go: '🔍 前往',
+    img: '/img/algorithm-visualizer.svg',
+    title: 'Algorithm Visualizer',
+    subtitle: '可视化算法，让代码动起来',
+    text: '交互式算法可视化平台，涵盖回溯、动态规划、贪心等主流算法',
+    url: 'https://algorithm-visualizer.org/',
+    show: true,
+    techStack: ['React', 'Redux', 'Node.js'],
+    usageScenario: '算法学习与教学演示',
+    descriptionMd: '/md/algorithm-visualizer.md'
   }
 
 ]
