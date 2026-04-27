@@ -98,6 +98,7 @@ const confirmDialog = ref({
 const selectedContact = ref<any>(null)
 const showChatMenu = ref(false)
 const showMemberList = ref(false)
+const showSidebar = ref(false)
 const roomMembers = ref<any[]>([])
 const showInviteDialog = ref(false)
 const isRemarkDialogOpen = ref(false)
@@ -183,7 +184,7 @@ const canSend = computed(() => {
 })
 
 const getAvatarColor = (userId: string) => {
-  const colors = ['#18181B', '#3F3F46', '#52525B', '#71717A', '#A1A1AA', '#27272A', '#525252', '#737373']
+  const colors = ['#F43F5E', '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#06B6D4', '#EF4444']
   let hash = 0
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash)
@@ -504,6 +505,7 @@ watch(selectedRoomId, (newId, oldId) => {
       loadRoomMembers(newId)
     } else {
       roomMembers.value = []
+      showSidebar.value = false
     }
   }
   if (oldId && newId !== oldId) {
@@ -1253,14 +1255,13 @@ const isRoomReadByOthers = (roomId: string): boolean => {
               <div class="flex items-center justify-between">
                 <p class="text-xs truncate pr-2" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
                   <span v-if="room.lastMessage">
-                    <span v-if="room.lastMessage.senderId === user?.userId">我: </span>
                     {{ getRoomPreview(room) ? truncateMessage(getRoomPreview(room), 18) : '' }}
                   </span>
                   <span v-else class="italic">暂无消息</span>
                 </p>
                 <span
                   v-if="getUnreadCount(room.id) > 0"
-                  class="min-w-[16px] h-4 px-1 bg-[#18181B] text-white text-[10px] font-medium flex items-center justify-center rounded-full"
+                  class="min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-medium flex items-center justify-center rounded-full"
                 >
                   {{ getUnreadCount(room.id) > 99 ? '99+' : getUnreadCount(room.id) }}
                 </span>
@@ -1332,13 +1333,16 @@ const isRoomReadByOthers = (roomId: string): boolean => {
 
     <!-- 右侧 - 聊天窗口 -->
     <div
-      class="relative flex-1 flex flex-col"
+      class="relative flex-1 flex"
       :class="isDarkTheme ? 'bg-[#18181B]' : 'bg-white'"
-      @dragenter="handleDragEnter"
-      @dragover="handleDragOver"
-      @dragleave="handleDragLeave"
-      @drop="handleDropUpload"
     >
+      <div
+        class="flex-1 flex flex-col min-w-0"
+        @dragenter="handleDragEnter"
+        @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
+        @drop="handleDropUpload"
+      >
       <!-- 未选择房间时的欢迎界面 -->
       <div v-if="!selectedRoomId" class="flex-1 flex items-center justify-center">
         <div class="text-center">
@@ -1369,12 +1373,27 @@ const isRoomReadByOthers = (roomId: string): boolean => {
             </div>
           </div>
 
-          <div class="relative">
+          <div class="flex items-center gap-1">
             <button
-              @click="toggleChatMenu"
+              v-if="isGroupChat"
+              @click="showSidebar = !showSidebar"
               class="w-8 h-8 flex items-center justify-center transition-colors"
-              :class="isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'"
+              :class="showSidebar ? (isDarkTheme ? 'text-white bg-white/10' : 'text-[#18181B] bg-gray-100') : (isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600')"
             >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </button>
+
+            <div class="relative">
+              <button
+                @click="toggleChatMenu"
+                class="w-8 h-8 flex items-center justify-center transition-colors"
+                :class="isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'"
+              >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="1"/>
                 <circle cx="19" cy="12" r="1"/>
@@ -1413,6 +1432,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
               >
                 解散
               </button>
+            </div>
             </div>
           </div>
         </header>
@@ -1663,6 +1683,39 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           </div>
         </div>
       </template>
+      </div>
+
+      <!-- 群聊侧边成员列表 -->
+      <div
+        v-if="isGroupChat && showSidebar && selectedRoomId"
+        class="w-60 border-l flex flex-col shrink-0"
+        :class="isDarkTheme ? 'border-gray-800 bg-[#27272A]' : 'border-gray-100 bg-white'"
+      >
+        <div class="px-4 py-4 border-b flex items-center justify-between" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-50'">
+          <h3 class="text-sm font-medium" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">成员</h3>
+          <span class="text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">{{ roomMembers.length }} 人</span>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <div
+            v-for="member in roomMembers"
+            :key="member.userId"
+            class="flex items-center gap-3 px-4 py-2.5"
+          >
+            <div
+              class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0"
+              :style="{ backgroundColor: getAvatarColor(member.userId) }"
+            >
+              {{ getAvatarText(getRemarkName(member.userId, member.username)) }}
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm truncate" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">
+                {{ member.userId === user?.userId ? '我' : getRemarkName(member.userId, member.username) }}
+              </p>
+              <p v-if="member.userId === currentRoom?.ownerId" class="text-xs text-amber-500">群主</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   

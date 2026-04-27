@@ -193,16 +193,18 @@ export function useWebSocket() {
         messages.value.push(receivedMsg)
         lastMessage.value = receivedMsg
 
-        // 更新房间的最后消息
         const roomIndex = rooms.value.findIndex(r => r.id === String(receivedMsg.roomId))
         if (roomIndex !== -1) {
           rooms.value[roomIndex].lastMessage = receivedMsg
         }
 
-        // 如果不是当前打开的房间，增加未读数
         if (currentRoomId.value !== String(receivedMsg.roomId)) {
           const roomId = String(receivedMsg.roomId)
   unreadCounts.value[roomId] = (unreadCounts.value[roomId] || 0) + 1
+        }
+
+        if (String(receivedMsg.senderId) === currentUserId) {
+          readReceipts.value.delete(String(receivedMsg.roomId))
         }
 
         showMessageNotification(receivedMsg.senderName, receivedMsg.content.slice(0, 50))
@@ -231,16 +233,18 @@ export function useWebSocket() {
         messages.value.push(fileMessage)
         lastMessage.value = fileMessage
 
-        // 更新房间的最后消息
         const fileRoomIndex = rooms.value.findIndex(r => r.id === String(fileMsgData.roomId))
         if (fileRoomIndex !== -1) {
           rooms.value[fileRoomIndex].lastMessage = fileMessage
         }
 
-        // 如果不是当前打开的房间，增加未读数
         if (currentRoomId.value !== String(fileMsgData.roomId)) {
           const roomId = String(fileMsgData.roomId)
           unreadCounts.value[roomId] = (unreadCounts.value[roomId] || 0) + 1
+        }
+
+        if (String(fileMsgData.senderId) === currentUserId) {
+          readReceipts.value.delete(String(fileMsgData.roomId))
         }
 
         showMessageNotification(fileMsgData.senderName, '[文件]')
@@ -359,6 +363,7 @@ export function useWebSocket() {
       case 'message:read': {
         const readRoomId = String(event.data.roomId)
         const readUserId = String(event.data.userId)
+        if (readUserId === currentUserId) break
         const existingSet = readReceipts.value.get(readRoomId)
         if (existingSet) {
           existingSet.add(readUserId)
