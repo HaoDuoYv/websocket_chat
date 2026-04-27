@@ -53,6 +53,18 @@ interface InviteResult {
 
 const normalizeMessageFileUrl = <T extends Message>(message: T): T => message
 
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission()
+  }
+}
+
+function showMessageNotification(senderName: string, body: string) {
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification(senderName, { body })
+  }
+}
+
 interface BannedResult {
   message: string
 }
@@ -79,12 +91,20 @@ export function useWebSocket() {
   // 每个房间的最后读取序列号（用于增量同步）
   const roomLastSeq = ref<Record<string, number>>({})
 
+  // 已读回执：roomId -> 已读用户 ID 集合
+  const readReceipts = ref<Map<string, Set<string>>>(new Map())
+
+  let currentUserId = ''
+
   const connect = (user: User) => {
+    currentUserId = user.userId
     socket.value = new WebSocket('/ws/chat')
 
     socket.value.onopen = () => {
       console.log('WebSocket connected')
       isConnected.value = true
+
+      requestNotificationPermission()
 
       // 发送用户加入事件
       const joinEvent: WebSocketEvent = {
@@ -184,6 +204,8 @@ export function useWebSocket() {
           const roomId = String(receivedMsg.roomId)
   unreadCounts.value[roomId] = (unreadCounts.value[roomId] || 0) + 1
         }
+
+        showMessageNotification(receivedMsg.senderName, receivedMsg.content.slice(0, 50))
         break
 
       case 'message:new:file':
@@ -220,6 +242,8 @@ export function useWebSocket() {
           const roomId = String(fileMsgData.roomId)
           unreadCounts.value[roomId] = (unreadCounts.value[roomId] || 0) + 1
         }
+
+        showMessageNotification(fileMsgData.senderName, '[文件]')
         break
 
       case 'message:history:response':
@@ -331,6 +355,18 @@ export function useWebSocket() {
       case 'user:list:response':
         onlineUsers.value = event.data.users || []
         break
+
+      case 'message:read': {
+        const readRoomId = String(event.data.roomId)
+        const readUserId = String(event.data.userId)
+        const existingSet = readReceipts.value.get(readRoomId)
+        if (existingSet) {
+          existingSet.add(readUserId)
+        } else {
+          readReceipts.value.set(readRoomId, new Set([readUserId]))
+        }
+        break
+      }
     }
   }
 
@@ -379,6 +415,18 @@ export function useWebSocket() {
       }
     }
     socket.value?.send(JSON.stringify(joinEvent))
+  }
+
+  const sendReadReceipt = (roomId: string) => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) return
+    const readEvent: WebSocketEvent = {
+      type: 'message:read',
+      data: {
+        roomId,
+        userId: currentUserId
+      }
+    }
+    socket.value.send(JSON.stringify(readEvent))
   }
 
   const startPrivateChat = (targetUserId: string) => {
@@ -435,6 +483,8 @@ export function useWebSocket() {
     if (unreadCounts.value[roomId]) {
       delete unreadCounts.value[roomId]
     }
+    // 发送已读回执
+    sendReadReceipt(roomId)
   }
 
   const getUnreadCount = (roomId: string): number => {
@@ -462,11 +512,13 @@ export function useWebSocket() {
     lastRoomMemberLeft,
     lastPrivateRoomCreated,
     roomLastSeq,
+    readReceipts,
     connect,
     sendMessage,
     sendFileMessage,
     createRoom,
     joinRoom,
+    sendReadReceipt,
     startPrivateChat,
     disconnect,
     setCurrentRoom,

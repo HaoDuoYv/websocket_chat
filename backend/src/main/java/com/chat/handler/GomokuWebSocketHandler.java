@@ -6,11 +6,13 @@ import com.chat.service.GomokuGameService.GameRoom;
 import com.chat.service.GomokuGameService.GameState;
 import com.chat.service.GomokuGameService.MoveResult;
 import com.chat.service.GomokuGameService.ReconnectResult;
+import com.chat.service.GomokuGameService.TimeoutEvent;
 import com.chat.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -606,6 +608,60 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         } catch (RuntimeException e) {
             logger.error("观战者加入对局失败: {}", e.getMessage());
             sendToSession(session.getId(), new Event("game:error", safeMap("message", e.getMessage())));
+        }
+    }
+
+    @EventListener
+    public void handleTimeoutEvent(TimeoutEvent event) throws IOException {
+        String roomId = event.getRoomId();
+        GameRoom room = gomokuGameService.getRoom(roomId);
+        if (room == null)
+            return;
+
+        Long timedOutUserId = event.getPlayer() == 1 ? room.getPlayer1Id() : room.getPlayer2Id();
+
+        broadcastToRoom(roomId, new Event("game:timeout", safeMap(
+                "roomId", roomId,
+                "userId", timedOutUserId != null ? String.valueOf(timedOutUserId) : null,
+                "message", "超时自动落子")));
+
+        MoveResult result = event.getMoveResult();
+        int player = event.getPlayer();
+        int row = event.getRow();
+        int col = event.getCol();
+
+        if (result.isWin()) {
+            broadcastToRoom(roomId, new Event("game:move:made", safeMap(
+                    "roomId", roomId,
+                    "row", row,
+                    "col", col,
+                    "player", player,
+                    "currentTurn", result.getCurrentTurn(),
+                    "board", room.getBoard())));
+
+            List<List<Integer>> winLineList = formatWinLine(result.getWinLine());
+            broadcastToRoom(roomId, new Event("game:over", safeMap(
+                    "roomId", roomId,
+                    "winner", result.getWinner(),
+                    "winLine", winLineList)));
+        } else if (result.isDraw()) {
+            broadcastToRoom(roomId, new Event("game:move:made", safeMap(
+                    "roomId", roomId,
+                    "row", row,
+                    "col", col,
+                    "player", player,
+                    "currentTurn", result.getCurrentTurn(),
+                    "board", room.getBoard())));
+
+            broadcastToRoom(roomId, new Event("game:draw", safeMap("roomId", roomId)));
+        } else {
+            broadcastToRoom(roomId, new Event("game:move:made", safeMap(
+                    "roomId", roomId,
+                    "row", row,
+                    "col", col,
+                    "player", player,
+                    "currentTurn", result.getCurrentTurn(),
+                    "board", room.getBoard())));
         }
     }
 

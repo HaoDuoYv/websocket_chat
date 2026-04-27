@@ -117,6 +117,9 @@ export function useGomokuWebSocket() {
   const moveRejected = ref<string>('')
   const joinFailed = ref(false)
   const restartRejected = ref(false)
+  const turnStartTime = ref(0)
+  const turnTimeLimit = 60000
+  const timeoutMessage = ref('')
 
   let reconnectAttempts = 0
   const maxReconnectAttempts = 5
@@ -207,6 +210,8 @@ export function useGomokuWebSocket() {
     moveRejected.value = ''
     joinFailed.value = false
     restartRejected.value = false
+    turnStartTime.value = 0
+    timeoutMessage.value = ''
   }
 
   const handleEvent = (event: GomokuEvent) => {
@@ -229,6 +234,9 @@ export function useGomokuWebSocket() {
         opponentLeft.value = false
         moveRejected.value = ''
         restartRejected.value = false
+        if (gameState.value.status === 'PLAYING') {
+          turnStartTime.value = Date.now()
+        }
         break
 
       case 'game:move:made':
@@ -243,6 +251,7 @@ export function useGomokuWebSocket() {
           gameState.value.currentTurn = event.data.currentTurn
           gameState.value.lastMove = [event.data.row, event.data.col]
         }
+        turnStartTime.value = Date.now()
         break
 
       case 'game:room:spectating':
@@ -254,6 +263,9 @@ export function useGomokuWebSocket() {
         opponentLeft.value = false
         moveRejected.value = ''
         restartRejected.value = false
+        if (gameState.value.status === 'PLAYING') {
+          turnStartTime.value = Date.now()
+        }
         break
 
       case 'game:move:rejected':
@@ -266,6 +278,7 @@ export function useGomokuWebSocket() {
           gameState.value.winner = event.data.winner
           gameState.value.winLine = event.data.winLine || null
         }
+        turnStartTime.value = 0
         break
 
       case 'game:draw':
@@ -273,6 +286,7 @@ export function useGomokuWebSocket() {
           gameState.value.status = 'FINISHED'
           gameState.value.winner = 0
         }
+        turnStartTime.value = 0
         break
 
       case 'game:restart:requested':
@@ -292,6 +306,7 @@ export function useGomokuWebSocket() {
         restartRejected.value = false
         opponentLeft.value = false
         opponentDisconnected.value = false
+        turnStartTime.value = Date.now()
         break
 
       case 'game:restart:rejected':
@@ -312,6 +327,7 @@ export function useGomokuWebSocket() {
           }
           if (gameState.value.status === 'WAITING' && gameState.value.blackPlayer && gameState.value.whitePlayer) {
             gameState.value.status = 'PLAYING'
+            turnStartTime.value = Date.now()
           }
           opponentLeft.value = false
         }
@@ -326,9 +342,20 @@ export function useGomokuWebSocket() {
         }
         break
 
-      case 'game:player:left':
-        opponentLeft.value = true
+      case 'game:player:left': {
+        const leftUserId = String(event.data.userId)
+        const isSpectator = gameState.value?.spectators.some(s => s.userId === leftUserId)
+        if (isSpectator) {
+          // 观战者离开，仅更新观战者列表
+          if (gameState.value) {
+            gameState.value.spectators = gameState.value.spectators.filter(s => s.userId !== leftUserId)
+          }
+        } else {
+          // 玩家离开，显示"对手已离开"
+          opponentLeft.value = true
+        }
         break
+      }
 
       case 'game:player:reconnected':
         opponentDisconnected.value = false
@@ -360,7 +387,15 @@ export function useGomokuWebSocket() {
           gameState.value = { ...updated }
           opponentLeft.value = false
           opponentDisconnected.value = false
+          if (gameState.value.status === 'PLAYING') {
+            turnStartTime.value = Date.now()
+          }
         }
+        break
+
+      case 'game:timeout':
+        timeoutMessage.value = event.data.message || '超时自动落子'
+        turnStartTime.value = Date.now()
         break
 
       case 'game:rejoin:failed':
@@ -423,6 +458,8 @@ export function useGomokuWebSocket() {
     joinFailed.value = false
     restartRejected.value = false
     currentRoomId.value = ''
+    turnStartTime.value = 0
+    timeoutMessage.value = ''
   }
 
   const rejoinRoom = (roomId: string) => {
@@ -448,6 +485,9 @@ export function useGomokuWebSocket() {
     moveRejected,
     joinFailed,
     restartRejected,
+    turnStartTime,
+    turnTimeLimit,
+    timeoutMessage,
     connect,
     disconnect,
     createRoom,

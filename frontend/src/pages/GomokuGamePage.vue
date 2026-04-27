@@ -16,6 +16,7 @@ const {
   isConnected, gameState, chatMessages,
   myUserId, opponentDisconnected, opponentLeft, moveRejected, joinFailed,
   restartRequest, restartRejected,
+  turnStartTime, turnTimeLimit, timeoutMessage,
   connect, makeMove,
   requestRestart, respondRestart, leaveRoom, sendChat,
   surrender, joinAsPlayer,
@@ -147,6 +148,53 @@ const handleSendChat = (content: string) => {
   sendChat(content)
 }
 
+// 倒计时
+const countdown = ref(0)
+let countdownInterval: ReturnType<typeof setInterval> | null = null
+
+const startCountdown = () => {
+  if (countdownInterval) clearInterval(countdownInterval)
+  countdownInterval = setInterval(() => {
+    if (!gameState.value || gameState.value.status !== 'PLAYING' || turnStartTime.value === 0) {
+      countdown.value = 0
+      return
+    }
+    const elapsed = Math.floor((Date.now() - turnStartTime.value) / 1000)
+    countdown.value = Math.max(0, Math.floor(turnTimeLimit / 1000) - elapsed)
+  }, 1000)
+}
+
+const stopCountdown = () => {
+  if (countdownInterval) {
+    clearInterval(countdownInterval)
+    countdownInterval = null
+  }
+  countdown.value = 0
+}
+
+// 监听超时提示
+watch(timeoutMessage, (msg) => {
+  if (msg) {
+    showToast(msg)
+    timeoutMessage.value = ''
+  }
+})
+
+// 监听游戏状态变化启动/停止倒计时
+watch(() => gameState.value?.status, (status) => {
+  if (status === 'PLAYING') {
+    startCountdown()
+  } else {
+    stopCountdown()
+  }
+})
+
+watch(turnStartTime, () => {
+  if (gameState.value?.status === 'PLAYING') {
+    startCountdown()
+  }
+})
+
 const canJoinAsPlayer = computed(() => {
   if (!gameState.value || gameState.value.myRole !== 'spectator') return false
   return !gameState.value.blackPlayer || !gameState.value.whitePlayer
@@ -191,6 +239,7 @@ watch(isConnected, (connected) => {
 
 onUnmounted(() => {
   if (toastTimer) clearTimeout(toastTimer)
+  stopCountdown()
 })
 </script>
 
@@ -248,18 +297,37 @@ onUnmounted(() => {
               <div class="flex items-center gap-2">
                 <span class="w-3 h-3 rounded-full bg-[#18181B] inline-block"></span>
                 <span>{{ gameState?.blackPlayer?.username || '等待加入' }}</span>
+                <span
+                  v-if="gameState?.status === 'PLAYING' && gameState?.currentTurn === 1 && countdown > 0"
+                  class="text-xs font-mono font-medium"
+                  :class="countdown <= 10 ? 'text-red-500' : (isDarkTheme ? 'text-gray-400' : 'text-gray-500')"
+                >{{ countdown }}s</span>
               </div>
               <div v-if="currentTurnText" class="font-medium" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-700'">
                 {{ currentTurnText }}
               </div>
               <div class="flex items-center gap-2">
                 <span>{{ gameState?.whitePlayer?.username || '等待加入' }}</span>
+                <span
+                  v-if="gameState?.status === 'PLAYING' && gameState?.currentTurn === 2 && countdown > 0"
+                  class="text-xs font-mono font-medium"
+                  :class="countdown <= 10 ? 'text-red-500' : (isDarkTheme ? 'text-gray-400' : 'text-gray-500')"
+                >{{ countdown }}s</span>
                 <span class="w-3 h-3 rounded-full border-2 inline-block" :class="isDarkTheme ? 'border-gray-400' : 'border-gray-500'"></span>
               </div>
               <div v-if="gameState?.spectators && gameState.spectators.length > 0" class="flex items-center gap-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 <span>{{ gameState.spectators.length }}</span>
               </div>
+            </div>
+
+            <!-- 倒计时预警横幅 -->
+            <div
+              v-if="gameState?.status === 'PLAYING' && countdown > 0 && countdown <= 10"
+              class="mb-2 flex items-center justify-center gap-2 rounded-xl px-4 py-2 animate-pulse bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span class="text-base font-bold font-mono">{{ countdown }}s</span>
             </div>
 
             <GomokuBoard
@@ -284,12 +352,22 @@ onUnmounted(() => {
               <span class="text-xs font-medium" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">
                 黑方: {{ gameState?.blackPlayer?.username || '等待加入' }}
               </span>
+              <span
+                v-if="gameState?.status === 'PLAYING' && gameState?.currentTurn === 1 && countdown > 0"
+                class="text-xs font-mono font-medium"
+                :class="countdown <= 10 ? 'text-red-500' : (isDarkTheme ? 'text-gray-400' : 'text-gray-500')"
+              >{{ countdown }}s</span>
             </div>
             <div class="flex items-center gap-2 mb-2">
               <span class="w-4 h-4 rounded-full border-2 inline-block" :class="isDarkTheme ? 'border-gray-400' : 'border-gray-500'"></span>
               <span class="text-xs font-medium" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">
                 白方: {{ gameState?.whitePlayer?.username || '等待加入' }}
               </span>
+              <span
+                v-if="gameState?.status === 'PLAYING' && gameState?.currentTurn === 2 && countdown > 0"
+                class="text-xs font-mono font-medium"
+                :class="countdown <= 10 ? 'text-red-500' : (isDarkTheme ? 'text-gray-400' : 'text-gray-500')"
+              >{{ countdown }}s</span>
             </div>
             <div v-if="currentTurnText" class="text-xs mt-2" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">
               当前: {{ currentTurnText }}

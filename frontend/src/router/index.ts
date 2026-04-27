@@ -41,4 +41,18 @@ const router = createRouter({
   routes,
 })
 
+// 页面标题映射
+const titleMap: Record<string, string> = {
+  home: '聊天',
+  chat: '聊天',
+  admin: '管理后台',
+  apps: '应用中心',
+  'gomoku-lobby': '五子棋大厅',
+  'gomoku-game': '五子棋对局',
+}
+
+router.afterEach((to) => {
+  document.title = titleMap[to.name as string] ?? '聊天'
+})
+
 export default router

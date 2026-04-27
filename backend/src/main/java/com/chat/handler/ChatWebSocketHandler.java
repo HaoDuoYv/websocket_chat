@@ -127,6 +127,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 break;
             case "room:invite:error":
                 break;
+            case "message:read":
+                handleMessageRead(session, event.getData());
+                break;
         }
     }
 
@@ -563,6 +566,22 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             logger.error("邀请成员失败: {}", e.getMessage());
             sendToSession(session.getId(), new Event("room:invite:error", Map.of("message", e.getMessage())));
         }
+    }
+
+    private void handleMessageRead(WebSocketSession session, Map<String, Object> data) throws IOException {
+        Long roomId = parseLongId(data.get("roomId"));
+        Long userId = sessionUserMap.get(session.getId());
+
+        if (userId == null) {
+            logger.warn("消息已读事件失败：未找到用户 sessionId={}", session.getId());
+            return;
+        }
+
+        // 向房间内其他成员广播已读事件
+        Event readEvent = new Event("message:read", Map.of(
+                "roomId", String.valueOf(roomId),
+                "userId", String.valueOf(userId)));
+        broadcastToRoomMembers(roomId, readEvent, session.getId());
     }
 
     private void handleMessageHistory(WebSocketSession session, Map<String, Object> data) throws IOException {

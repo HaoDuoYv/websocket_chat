@@ -68,6 +68,7 @@ const {
   lastBannedResult,
   lastRoomMemberLeft,
   lastPrivateRoomCreated,
+  readReceipts,
 } = useWebSocket()
 
 const selectedRoomId = ref<string | null>(null)
@@ -1041,6 +1042,15 @@ const handleDropUpload = async (event: DragEvent) => {
 const isImageMessage = (message: { type?: string; fileType?: string }) => {
   return message.type === 'file' && isImageFile(message.fileType || '')
 }
+
+const isRoomReadByOthers = (roomId: string): boolean => {
+  const readSet = readReceipts.value.get(roomId)
+  if (!readSet) return false
+  for (const userId of readSet) {
+    if (userId !== user.value?.userId) return true
+  }
+  return false
+}
 </script>
 
 <template>
@@ -1230,7 +1240,6 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
               >
                 {{ getAvatarText(getDisplayRoomName(room)) }}
               </div>
-              <div v-if="room.type === 'private'" class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#737373] border-2 rounded-full" :class="isDarkTheme ? 'border-gray-800' : 'border-white'"></div>
             </div>
 
             <!-- 内容 - 极简信息 -->
@@ -1461,7 +1470,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
                         ? 'overflow-hidden rounded-[20px] px-0.5 py-0.5'
                         : 'rounded-2xl px-4 py-2 text-sm',
                       String(message.senderId) === user?.userId
-                        ? 'bg-[#18181B]'
+                        ? (isDarkTheme ? 'bg-[#18181B]' : 'bg-blue-500')
                         : (isDarkTheme ? 'bg-gray-800' : 'bg-gray-100')
                     ]"
                   >
@@ -1487,8 +1496,20 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
                   </div>
 
                   <!-- 时间 -->
-                  <div class="text-xs mt-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">
+                  <div class="text-xs mt-1 flex items-center gap-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">
                     {{ formatTime(message.timestamp) }}
+                    <!-- 已读/未读图标 - 仅自己发送的消息显示 -->
+                    <template v-if="String(message.senderId) === user?.userId">
+                      <!-- 双勾 = 已读（蓝色） -->
+                      <svg v-if="isRoomReadByOthers(String(message.roomId))" width="16" height="11" viewBox="0 0 16 11" fill="none" class="text-blue-500">
+                        <path d="M1 5.5l3.5 4 8-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M4.5 5.5l3.5 4 8-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <!-- 单勾 = 未读（灰色） -->
+                      <svg v-else width="10" height="11" viewBox="0 0 10 11" fill="none" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
+                        <path d="M1 5.5l3.5 4 5-5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -1765,7 +1786,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
               {{ getAvatarText(getRemarkName(member.userId, member.username)) }}
             </div>
             <div>
-              <p class="text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ getRemarkName(member.userId, member.username) }}</p>
+              <p class="text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ member.userId === user?.userId ? '我' : getRemarkName(member.userId, member.username) }}</p>
               <p v-if="member.userId === currentRoom?.ownerId" class="text-xs text-[#525252]">群主</p>
             </div>
           </div>

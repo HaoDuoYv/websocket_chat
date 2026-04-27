@@ -1,12 +1,15 @@
 package com.chat.service;
 
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 
 @Service
 public class GomokuGameService {
@@ -16,7 +19,106 @@ public class GomokuGameService {
     private static final long INACTIVE_ROOM_TIMEOUT_MS = 5 * 60 * 1000; // 5分钟
     private static final long DISCONNECT_TIMEOUT_MS = 30 * 1000; // 30秒
 
+    private static final long TURN_TIMEOUT_MS = 60 * 1000; // 60秒落子超时
+
     private final Map<String, GameRoom> rooms = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final Map<String, ScheduledFuture<?>> timeoutTasks = new ConcurrentHashMap<>();
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @PreDestroy
+    public void shutdown() {
+        scheduler.shutdownNow();
+    }
+
+    public void scheduleTimeout(String roomId) {
+        cancelTimeout(roomId);
+        GameRoom room = rooms.get(roomId);
+        if (room == null)
+            return;
+        int expectedPlayer = room.getCurrentTurn();
+        ScheduledFuture<?> future = scheduler.schedule(() -> {
+            try {
+                makeTimeoutMove(roomId, expectedPlayer);
+            } catch (Exception e) {
+                logger.error("超时自动落子失败: roomId={}, error={}", roomId, e.getMessage());
+            }
+        }, TURN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        timeoutTasks.put(roomId, future);
+    }
+
+    public void cancelTimeout(String roomId) {
+        ScheduledFuture<?> future = timeoutTasks.remove(roomId);
+        if (future != null) {
+            future.cancel(false);
+        }
+    }
+
+    private void makeTimeoutMove(String roomId, int expectedPlayer) {
+        GameRoom room = rooms.get(roomId);
+        if (room == null)
+            return;
+
+        MoveResult result;
+        int row, col, player;
+
+        synchronized (room) {
+            if (room.getGameState() != GameState.PLAYING)
+                return;
+            if (room.getCurrentTurn() != expectedPlayer)
+                return;
+
+            player = room.getCurrentTurn();
+            int[] pos = findRandomEmptyPosition(room.getBoard());
+            if (pos == null)
+                return;
+
+            row = pos[0];
+            col = pos[1];
+
+            room.getBoard()[row][col] = player;
+            room.addMove(row, col, player);
+            room.updateActivity();
+
+            List<int[]> winLine = checkWin(room.getBoard(), row, col, player);
+            if (winLine != null) {
+                room.setGameState(GameState.FINISHED);
+                room.setWinner(player);
+                room.setWinLine(winLine);
+                result = MoveResult.win(player, winLine, room.getCurrentTurn());
+            } else if (isBoardFull(room.getBoard())) {
+                room.setGameState(GameState.FINISHED);
+                result = MoveResult.draw();
+            } else {
+                room.setCurrentTurn(player == 1 ? 2 : 1);
+                result = MoveResult.ok(room.getCurrentTurn());
+            }
+        }
+
+        cancelTimeout(roomId);
+        logger.info("超时自动落子: roomId={}, player={}, row={}, col={}", roomId, player, row, col);
+        eventPublisher.publishEvent(new TimeoutEvent(roomId, row, col, player, result));
+
+        if (room.getGameState() == GameState.PLAYING) {
+            scheduleTimeout(roomId);
+        }
+    }
+
+    private int[] findRandomEmptyPosition(int[][] board) {
+        List<int[]> emptyPositions = new ArrayList<>();
+        for (int i = 0; i < BOARD_SIZE; i++) {
+            for (int j = 0; j < BOARD_SIZE; j++) {
+                if (board[i][j] == 0) {
+                    emptyPositions.add(new int[] { i, j });
+                }
+            }
+        }
+        if (emptyPositions.isEmpty())
+            return null;
+        return emptyPositions.get(new Random().nextInt(emptyPositions.size()));
+    }
 
     public GameRoom createRoom(String roomName, String password, Long userId, String username) {
         String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
@@ -44,6 +146,7 @@ public class GomokuGameService {
         room.setGameState(GameState.PLAYING);
         room.setCurrentTurn(1); // 黑棋先手
         room.updateActivity();
+        scheduleTimeout(roomId);
         logger.info("玩家 {} 加入房间 {}", username, roomId);
         return room;
     }
@@ -75,48 +178,55 @@ public class GomokuGameService {
         if (room == null) {
             return MoveResult.reject("房间不存在");
         }
-        if (room.getGameState() != GameState.PLAYING) {
-            return MoveResult.reject("游戏未在进行中");
-        }
 
-        int player = room.getPlayerNumber(userId);
-        if (player == 0) {
-            return MoveResult.reject("你不是游戏玩家");
-        }
-        if (room.getCurrentTurn() != player) {
-            return MoveResult.reject("不是你的回合");
-        }
-        if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) {
-            return MoveResult.reject("落子位置超出棋盘范围");
-        }
-        if (room.getBoard()[row][col] != 0) {
-            return MoveResult.reject("该位置已有棋子");
-        }
+        synchronized (room) {
+            if (room.getGameState() != GameState.PLAYING) {
+                return MoveResult.reject("游戏未在进行中");
+            }
 
-        room.getBoard()[row][col] = player;
-        room.addMove(row, col, player);
-        room.updateActivity();
+            int player = room.getPlayerNumber(userId);
+            if (player == 0) {
+                return MoveResult.reject("你不是游戏玩家");
+            }
+            if (room.getCurrentTurn() != player) {
+                return MoveResult.reject("不是你的回合");
+            }
+            if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) {
+                return MoveResult.reject("落子位置超出棋盘范围");
+            }
+            if (room.getBoard()[row][col] != 0) {
+                return MoveResult.reject("该位置已有棋子");
+            }
 
-        List<int[]> winLine = checkWin(room.getBoard(), row, col, player);
-        if (winLine != null) {
-            room.setGameState(GameState.FINISHED);
-            room.setWinner(player);
-            room.setWinLine(winLine);
-            logger.info("五子棋对局结束: roomId={}, winner={}", roomId, player);
-            return MoveResult.win(player, winLine, room.getCurrentTurn());
+            cancelTimeout(roomId);
+
+            room.getBoard()[row][col] = player;
+            room.addMove(row, col, player);
+            room.updateActivity();
+
+            List<int[]> winLine = checkWin(room.getBoard(), row, col, player);
+            if (winLine != null) {
+                room.setGameState(GameState.FINISHED);
+                room.setWinner(player);
+                room.setWinLine(winLine);
+                logger.info("五子棋对局结束: roomId={}, winner={}", roomId, player);
+                return MoveResult.win(player, winLine, room.getCurrentTurn());
+            }
+
+            if (isBoardFull(room.getBoard())) {
+                room.setGameState(GameState.FINISHED);
+                logger.info("五子棋平局: roomId={}", roomId);
+                return MoveResult.draw();
+            }
+
+            room.setCurrentTurn(player == 1 ? 2 : 1);
+            scheduleTimeout(roomId);
+            return MoveResult.ok(room.getCurrentTurn());
         }
-
-        if (isBoardFull(room.getBoard())) {
-            room.setGameState(GameState.FINISHED);
-            logger.info("五子棋平局: roomId={}", roomId);
-            return MoveResult.draw();
-        }
-
-        room.setCurrentTurn(player == 1 ? 2 : 1);
-        return MoveResult.ok(room.getCurrentTurn());
     }
 
     public GameRoom restartGame(String roomId) {
+        cancelTimeout(roomId);
         GameRoom room = rooms.get(roomId);
         if (room == null) {
             throw new RuntimeException("房间不存在");
@@ -128,6 +238,7 @@ public class GomokuGameService {
         room.setWinLine(null);
         room.clearDisconnected();
         room.updateActivity();
+        scheduleTimeout(roomId);
         logger.info("五子棋重新开始: roomId={}", roomId);
         return room;
     }
@@ -149,6 +260,7 @@ public class GomokuGameService {
         int winner = player == 1 ? 2 : 1;
         room.setGameState(GameState.FINISHED);
         room.setWinner(winner);
+        cancelTimeout(roomId);
         room.updateActivity();
         logger.info("五子棋玩家 {} 认输，对方获胜: roomId={}, winner={}", userId, roomId, winner);
         return room;
@@ -180,6 +292,7 @@ public class GomokuGameService {
                 && room.getPlayer1Id() != null && room.getPlayer2Id() != null) {
             room.setGameState(GameState.PLAYING);
             room.setCurrentTurn(1);
+            scheduleTimeout(roomId);
         }
 
         room.updateActivity();
@@ -205,6 +318,7 @@ public class GomokuGameService {
         // 如果房间空了就移除
         if (room.getPlayer1Id() == null && room.getPlayer2Id() == null) {
             rooms.remove(roomId);
+            cancelTimeout(roomId);
             logger.info("五子棋房间移除(无人): roomId={}", roomId);
             return room;
         }
@@ -214,6 +328,7 @@ public class GomokuGameService {
             room.setGameState(GameState.FINISHED);
             int otherPlayer = player == 1 ? 2 : 1;
             room.setWinner(otherPlayer);
+            cancelTimeout(roomId);
             logger.info("五子棋玩家离开，对方获胜: roomId={}, winner={}", roomId, otherPlayer);
         }
 
@@ -309,6 +424,7 @@ public class GomokuGameService {
                     room.setGameState(GameState.FINISHED);
                     room.setWinner(otherPlayer);
                     room.clearDisconnected();
+                    cancelTimeout(entry.getKey());
                     logger.info("断线超时，判定断线方负: roomId={}, winner={}", entry.getKey(), otherPlayer);
                 }
             }
@@ -323,6 +439,7 @@ public class GomokuGameService {
 
         for (String roomId : toRemove) {
             rooms.remove(roomId);
+            cancelTimeout(roomId);
         }
     }
 
@@ -684,6 +801,42 @@ public class GomokuGameService {
 
         public GameRoom getRoom() {
             return room;
+        }
+    }
+
+    public static class TimeoutEvent {
+        private final String roomId;
+        private final int row;
+        private final int col;
+        private final int player;
+        private final MoveResult moveResult;
+
+        public TimeoutEvent(String roomId, int row, int col, int player, MoveResult moveResult) {
+            this.roomId = roomId;
+            this.row = row;
+            this.col = col;
+            this.player = player;
+            this.moveResult = moveResult;
+        }
+
+        public String getRoomId() {
+            return roomId;
+        }
+
+        public int getRow() {
+            return row;
+        }
+
+        public int getCol() {
+            return col;
+        }
+
+        public int getPlayer() {
+            return player;
+        }
+
+        public MoveResult getMoveResult() {
+            return moveResult;
         }
     }
 }
