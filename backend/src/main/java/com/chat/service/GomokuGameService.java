@@ -133,6 +133,13 @@ public class GomokuGameService {
         if (room == null) {
             throw new RuntimeException("房间不存在");
         }
+        if (userId.equals(room.getPlayer1Id())) {
+            throw new RuntimeException("不能和自己下棋");
+        }
+        GameRoom existingRoom = findUserRoom(userId);
+        if (existingRoom != null && !existingRoom.getRoomId().equals(roomId)) {
+            throw new RuntimeException("你已在其他房间中");
+        }
         if (room.isFull()) {
             throw new RuntimeException("房间已满");
         }

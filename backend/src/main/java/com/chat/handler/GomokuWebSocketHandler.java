@@ -205,6 +205,12 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         String username = (String) data.get("username");
 
         try {
+            GameRoom existingRoom = gomokuGameService.findUserRoom(userId);
+            if (existingRoom != null) {
+                sendToSession(session.getId(), new Event("game:error", safeMap("message", "你已在其他房间中，请先离开当前房间")));
+                return;
+            }
+
             GameRoom room = gomokuGameService.createRoom(roomName, password, userId, username);
             String roomId = room.getRoomId();
 
@@ -261,6 +267,18 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         } catch (RuntimeException e) {
             logger.error("加入五子棋房间失败: {}", e.getMessage());
 
+            if (e.getMessage() != null && e.getMessage().contains("不能和自己下棋")) {
+                sendToSession(session.getId(), new Event("game:room:join:failed", safeMap("reason", "不能和自己下棋")));
+                return;
+            }
+
+            if (e.getMessage() != null && e.getMessage().contains("已在其他房间")) {
+                GameRoom existingRoom = gomokuGameService.findUserRoom(userId);
+                sendToSession(session.getId(), new Event("game:room:join:rejected", safeMap(
+                        "reason", "你已在其他房间中", "roomId", existingRoom != null ? existingRoom.getRoomId() : "")));
+                return;
+            }
+
             // 如果游戏已结束或进行中，检查是否有空位可以补位
             if (e.getMessage() != null && (e.getMessage().contains("只能观战") || e.getMessage().contains("游戏进行中"))) {
                 GameRoom roomForCheck = gomokuGameService.getRoom(roomId);
@@ -299,13 +317,6 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 }
             }
 
-            // 检查是否已在房间中
-            GameRoom existingRoom = gomokuGameService.findUserRoom(userId);
-            if (existingRoom != null) {
-                sendToSession(session.getId(), new Event("game:room:join:rejected", safeMap(
-                        "reason", "你已在房间中", "roomId", existingRoom.getRoomId())));
-                return;
-            }
             sendToSession(session.getId(), new Event("game:room:join:failed", safeMap("reason", e.getMessage())));
         }
     }

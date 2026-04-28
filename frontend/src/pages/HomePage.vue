@@ -289,6 +289,12 @@ const messageContentStyle = (): CSSProperties => ({
   wordBreak: 'break-word'
 })
 
+const isNearBottom = () => {
+  const el = messagesContainer.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 150
+}
+
 const scrollToBottom = () => {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -493,7 +499,9 @@ watch(activeTab, value => {
 })
 
 watch(roomMessages, () => {
-  scrollToBottom()
+  if (isNearBottom()) {
+    scrollToBottom()
+  }
 }, { deep: true })
 
 watch(selectedRoomId, (newId, oldId) => {

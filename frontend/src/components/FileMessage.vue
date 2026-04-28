@@ -68,6 +68,7 @@ const handlePreview = () => {
     <div v-if="imageMessage" class="inline-flex max-w-full flex-col items-start gap-2">
       <div class="group relative overflow-hidden rounded-[24px] border shadow-sm ring-1 ring-inset transition-all duration-300 hover:scale-[1.02] hover:shadow-md"
         :class="isDark ? 'border-gray-700/80 bg-gray-900/70 ring-white/10' : 'border-blue-400 bg-gray-100 ring-blue-200/70'">
+        <img
           :src="props.fileUrl"
           :alt="fileName"
           class="block max-h-[360px] max-w-[220px] cursor-zoom-in object-cover sm:max-w-[260px] md:max-w-[320px] transition-transform duration-500 hover:scale-105"
