@@ -5,6 +5,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import FileMessage from '@/components/FileMessage.vue'
 import FileUploadButton from '@/components/FileUploadButton.vue'
 import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
+import { emojiCategories } from '@/config/emojis'
 
 const PROJECT_NOTICE_STORAGE_KEY = 'project-notice-dismissed'
 const projectNotice = {
@@ -341,7 +342,7 @@ const shouldShowTime = (index: number) => {
   return current.timestamp - prev.timestamp > 5 * 60 * 1000
 }
 
-const emojis = ['😀', '😂', '🥰', '😎', '🤔', '👍', '❤️', '🎉', '🔥', '👏', '🙏', '✅', '❌', '💡']
+const activeEmojiCategory = ref('frequent')
 
 const insertEmoji = (emoji: string) => {
   newMessage.value += emoji
@@ -568,18 +569,31 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
 
       <div class="px-6 py-4 border-t" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
         <div v-if="showEmojiPicker" class="mb-3">
-          <div class="flex flex-wrap gap-1">
-            <button
-              v-for="emoji in emojis"
-              :key="emoji"
-              @click="insertEmoji(emoji)"
-              class="w-8 h-8 text-base transition-colors"
-              :class="isDarkTheme ? 'hover:bg-gray-800' : 'hover:bg-gray-100'"
-            >
-              {{ emoji }}
-            </button>
+            <div class="flex gap-1 mb-2 overflow-x-auto pb-1">
+              <button
+                v-for="cat in emojiCategories"
+                :key="cat.key"
+                @click="activeEmojiCategory = cat.key"
+                class="shrink-0 px-2 py-1 text-xs rounded-md transition-colors"
+                :class="activeEmojiCategory === cat.key
+                  ? (isDarkTheme ? 'bg-white/10 text-white' : 'bg-gray-200 text-gray-800')
+                  : (isDarkTheme ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')"
+              >
+                {{ cat.icon }} {{ cat.label }}
+              </button>
+            </div>
+            <div class="grid grid-cols-8 gap-0.5 max-h-48 overflow-y-auto">
+              <button
+                v-for="(emoji, idx) in emojiCategories.find(c => c.key === activeEmojiCategory)?.emojis"
+                :key="idx"
+                @click="insertEmoji(emoji)"
+                class="w-8 h-8 text-lg flex items-center justify-center rounded transition-colors"
+                :class="isDarkTheme ? 'hover:bg-gray-800' : 'hover:bg-gray-100'"
+              >
+                {{ emoji }}
+              </button>
+            </div>
           </div>
-        </div>
 
         <div v-if="pendingAttachments.length > 0" class="mb-3 flex gap-3 overflow-x-auto pb-1">
           <div
