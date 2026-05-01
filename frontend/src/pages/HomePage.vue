@@ -102,6 +102,9 @@ const showMemberList = ref(false)
 const showSidebar = ref(false)
 const roomMembers = ref<any[]>([])
 const showInviteDialog = ref(false)
+const inviteSearchQuery = ref('')
+const inviteSearchInput = ref<HTMLInputElement | null>(null)
+const messageTextarea = ref<HTMLTextAreaElement | null>(null)
 const isRemarkDialogOpen = ref(false)
 const remarkTarget = ref<{ userId: string; username: string } | null>(null)
 const userRemarks = ref<Record<string, string>>({})
@@ -143,7 +146,12 @@ const filteredContacts = computed(() => {
 
 const inviteableUsers = computed(() => {
   const memberIds = new Set(roomMembers.value.map(m => m.userId))
-  return filteredContacts.value.filter(contact => !memberIds.has(contact.userId))
+  const query = inviteSearchQuery.value.trim().toLowerCase()
+  return allContacts.value.filter(contact => {
+    if (memberIds.has(contact.userId)) return false
+    if (!query) return true
+    return getRemarkName(contact.userId, contact.username).toLowerCase().includes(query)
+  })
 })
 
 const currentRoom = computed(() => {
@@ -287,7 +295,8 @@ const messageContentClass = (isSelf: boolean) => {
 
 const messageContentStyle = (): CSSProperties => ({
   overflowWrap: 'anywhere',
-  wordBreak: 'break-word'
+  wordBreak: 'break-word',
+  whiteSpace: 'pre-wrap'
 })
 
 const isNearBottom = () => {
@@ -820,8 +829,10 @@ const handleShowInvite = async () => {
   closeChatMenu()
   if (!selectedRoomId.value) return
 
-  await handleShowMembers()
+  inviteSearchQuery.value = ''
+  await loadRoomMembers(selectedRoomId.value, false)
   showInviteDialog.value = true
+  nextTick(() => inviteSearchInput.value?.focus())
 }
 
 const handleKickMember = (memberId: string, memberName: string) => {
@@ -969,6 +980,13 @@ const sendPendingAttachments = async () => {
   }
 }
 
+const autoResizeTextarea = () => {
+  const el = messageTextarea.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+}
+
 const handleSendMessage = async () => {
   if (!canSend.value || !user.value || !selectedRoomId.value) return
 
@@ -976,6 +994,11 @@ const handleSendMessage = async () => {
   if (content) {
     sendMessage(selectedRoomId.value, content, user.value.userId)
     newMessage.value = ''
+    nextTick(() => {
+      if (messageTextarea.value) {
+        messageTextarea.value.style.height = 'auto'
+      }
+    })
   }
 
   showEmojiPicker.value = false
@@ -1449,8 +1472,11 @@ const isRoomReadByOthers = (roomId: string): boolean => {
         <!-- 消息区域 - 大量留白 -->
         <div ref="messagesContainer" class="flex-1 overflow-y-auto px-6 py-6">
           <!-- 空状态 -->
-          <div v-if="roomMessages.length === 0" class="flex flex-col items-center justify-center h-full" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">
-            <p class="text-xs">还没有消息</p>
+          <div v-if="roomMessages.length === 0" class="flex flex-col items-center justify-center h-full gap-3" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="opacity-50">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <p class="text-xs">还没有消息，发送第一条吧</p>
           </div>
           
           <!-- 消息列表 -->
@@ -1473,7 +1499,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
               <!-- 消息气泡 - 极简 -->
               <div
                 :class="[
-                  'flex gap-3 mb-4',
+                  'flex gap-3 mb-4 animate-message-in',
                   String(message.senderId) === user?.userId ? 'flex-row-reverse' : 'flex-row'
                 ]"
               >
@@ -1499,7 +1525,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                         ? 'overflow-hidden rounded-[20px] px-0.5 py-0.5'
                         : 'rounded-2xl px-4 py-2 text-sm',
                       String(message.senderId) === user?.userId
-                        ? (isDarkTheme ? 'bg-[#18181B]' : 'bg-blue-500')
+                        ? (isDarkTheme ? 'bg-[#18181B]' : 'bg-blue-500 shadow-sm')
                         : (isDarkTheme ? 'bg-gray-800' : 'bg-gray-100')
                     ]"
                   >
@@ -1618,10 +1644,10 @@ const isRoomReadByOthers = (roomId: string): boolean => {
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-end gap-2">
             <button
               @click="showEmojiPicker = !showEmojiPicker"
-              class="w-8 h-8 flex items-center justify-center transition-colors"
+              class="w-8 h-8 flex items-center justify-center transition-colors cursor-pointer"
               :class="isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1641,21 +1667,23 @@ const isRoomReadByOthers = (roomId: string): boolean => {
             />
 
             <div class="flex-1 relative">
-              <input
+              <textarea
+                ref="messageTextarea"
                 v-model="newMessage"
                 @paste="handlePasteUpload"
-                @keyup.enter="handleSendMessage"
-                type="text"
+                @keydown.enter.exact.prevent="handleSendMessage"
+                @input="autoResizeTextarea"
+                rows="1"
                 placeholder="输入消息"
-                class="w-full px-0 py-2 bg-transparent border-0 border-b text-sm focus:outline-none focus:border-[#18181B] transition-colors"
+                class="w-full px-0 py-2 bg-transparent border-0 border-b text-sm focus:outline-none focus:border-[#18181B] transition-colors resize-none overflow-hidden leading-5"
                 :class="isDarkTheme ? 'border-gray-700 text-gray-200 placeholder-gray-500' : 'border-gray-200 text-gray-700 placeholder-gray-400'"
-              />
+              ></textarea>
             </div>
 
             <button
               @click="handleSendMessage"
               :disabled="!canSend"
-              class="w-8 h-8 bg-[#18181B] hover:bg-[#27272A] text-white flex items-center justify-center transition-colors"
+              class="w-8 h-8 bg-[#18181B] hover:bg-[#27272A] text-white flex items-center justify-center transition-colors rounded-lg flex-shrink-0"
               :class="isDarkTheme ? 'disabled:bg-gray-800' : 'disabled:bg-gray-200'"
             >
               <svg v-if="!isSendingFiles" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1877,9 +1905,9 @@ const isRoomReadByOthers = (roomId: string): boolean => {
     </div>
   </div>
 
-  <!-- 邀请成员对话框 - 极简 -->
+  <!-- 邀请成员对话框 -->
   <div v-if="showInviteDialog" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" @click.self="showInviteDialog = false">
-    <div class="w-full max-w-xs" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white'">
+    <div class="w-full max-w-xs rounded-2xl overflow-hidden" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white'">
       <div class="px-5 py-4 border-b flex justify-between items-center" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
         <h3 class="text-sm font-medium" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">邀请</h3>
         <button @click="showInviteDialog = false" :class="isDarkTheme ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'">
@@ -1889,16 +1917,31 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           </svg>
         </button>
       </div>
+      <div class="px-4 py-3">
+        <div class="relative">
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            v-model="inviteSearchQuery"
+            ref="inviteSearchInput"
+            type="text"
+            placeholder="搜索联系人"
+            class="w-full pl-8 pr-3 py-2 text-xs rounded-lg border focus:outline-none"
+            :class="isDarkTheme ? 'bg-[#18181B] border-gray-700 text-gray-200 placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-700 placeholder-gray-400'"
+          />
+        </div>
+      </div>
       <div class="max-h-72 overflow-y-auto">
-        <div v-if="inviteableUsers.length === 0" class="px-5 py-4 text-center text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
-          没有可邀请的用户
+        <div v-if="inviteableUsers.length === 0" class="px-5 py-8 text-center" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
+          <p class="text-xs">无匹配用户</p>
         </div>
         <div
           v-for="contact in inviteableUsers"
           :key="contact.userId"
           @click="handleInviteMember(contact.userId)"
-          class="flex items-center gap-3 px-5 py-3 cursor-pointer border-b"
-          :class="isDarkTheme ? 'border-gray-800 hover:bg-gray-800' : 'border-gray-50 hover:bg-gray-50'"
+          class="flex items-center gap-3 mx-3 px-2 py-3 cursor-pointer rounded-lg transition-colors duration-150"
+          :class="isDarkTheme ? 'hover:bg-gray-800' : 'hover:bg-gray-50'"
         >
           <div
             class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
@@ -1912,7 +1955,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
               {{ contact.isOnline ? '在线' : '离线' }}
             </p>
           </div>
-          <svg class="text-[#18181B]" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
