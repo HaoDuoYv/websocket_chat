@@ -1,33 +1,92 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGomokuWebSocket } from '@/composables/useGomokuWebSocket'
 import type { GomokuRoom } from '@/composables/useGomokuWebSocket'
+import { useEditorWebSocket } from '@/composables/useEditorWebSocket'
+import type { EditorRoom } from '@/composables/useEditorWebSocket'
 
 const router = useRouter()
 const isDark = ref(localStorage.getItem('theme') === 'dark')
 
+// Gomoku WebSocket
 const {
-  isConnected, rooms, gameState, currentRoomId,
-  connect, disconnect, createRoom, joinRoom, spectateRoom
+  isConnected: gomokuConnected, rooms: gomokuRooms, gameState, currentRoomId,
+  connect: gomokuConnect, disconnect: gomokuDisconnect,
+  createRoom: gomokuCreateRoom, joinRoom: gomokuJoinRoom, spectateRoom
 } = useGomokuWebSocket()
+
+// Editor WebSocket
+const {
+  isConnected: editorConnected, rooms: editorRooms,
+  connectToLobby: editorConnectToLobby, disconnect: editorDisconnect,
+  createRoom: editorCreateRoom, joinRoom: editorJoinRoom,
+  setOnRoomJoined: editorSetOnRoomJoined
+} = useEditorWebSocket()
 
 const isCreateDialogOpen = ref(false)
 const isPasswordDialogOpen = ref(false)
 const selectedRoomId = ref('')
+const selectedRoomType = ref<'gomoku' | 'editor'>('gomoku')
 
 const newRoomName = ref('')
 const newRoomPassword = ref('')
 const inputPassword = ref('')
+const newRoomType = ref<'gomoku' | 'editor'>('gomoku')
 
-const statusConfig: Record<string, { label: string; lightClass: string; darkClass: string }> = {
+const editorJoinedDocId = ref('')
+
+interface UnifiedRoom {
+  id: string
+  roomName: string
+  hasPassword: boolean
+  count: number
+  countLabel: string
+  status: string
+  createdAt: number
+  type: 'gomoku' | 'editor'
+}
+
+const gomokuStatusConfig: Record<string, { label: string; lightClass: string; darkClass: string }> = {
   WAITING: { label: '等待中', lightClass: 'bg-yellow-100 text-yellow-700', darkClass: 'bg-yellow-900/30 text-yellow-400' },
   PLAYING: { label: '对战中', lightClass: 'bg-green-100 text-green-700', darkClass: 'bg-green-900/30 text-green-400' },
   FINISHED: { label: '已结束', lightClass: 'bg-gray-100 text-gray-600', darkClass: 'bg-gray-700/50 text-gray-400' }
 }
 
-function getStatusBadge(status: string) {
-  const config = statusConfig[status]
+const editorStatusConfig = {
+  label: '协作中',
+  lightClass: 'bg-blue-100 text-blue-700',
+  darkClass: 'bg-blue-900/30 text-blue-400'
+}
+
+const allRooms = computed<UnifiedRoom[]>(() => {
+  const gomoku: UnifiedRoom[] = gomokuRooms.value.map((r: GomokuRoom) => ({
+    id: r.roomId,
+    roomName: r.roomName,
+    hasPassword: r.hasPassword,
+    count: r.playerCount,
+    countLabel: `${r.playerCount}/2`,
+    status: r.status,
+    createdAt: 0,
+    type: 'gomoku' as const
+  }))
+
+  const editor: UnifiedRoom[] = editorRooms.value.map((r: EditorRoom) => ({
+    id: r.docId,
+    roomName: r.roomName,
+    hasPassword: r.hasPassword,
+    count: r.participantCount,
+    countLabel: `${r.participantCount} 人`,
+    status: r.participantCount > 0 ? 'ACTIVE' : 'IDLE',
+    createdAt: r.createdAt || 0,
+    type: 'editor' as const
+  }))
+
+  return [...gomoku, ...editor].sort((a, b) => b.createdAt - a.createdAt)
+})
+
+function getGomokuStatusBadge(status: string) {
+  const config = gomokuStatusConfig[status]
   if (!config) return { label: status, class: '' }
   return {
     label: config.label,
@@ -35,39 +94,74 @@ function getStatusBadge(status: string) {
   }
 }
 
-function handleRoomClick(room: GomokuRoom) {
-  if (room.playerCount >= 2) {
-    spectateRoom(room.roomId)
+function getEditorStatusBadge() {
+  return {
+    label: editorStatusConfig.label,
+    class: isDark.value ? editorStatusConfig.darkClass : editorStatusConfig.lightClass
+  }
+}
+
+function handleRoomClick(room: UnifiedRoom) {
+  selectedRoomType.value = room.type
+
+  if (room.type === 'editor') {
+    if (room.hasPassword) {
+      selectedRoomId.value = room.id
+      inputPassword.value = ''
+      isPasswordDialogOpen.value = true
+      return
+    }
+    editorJoinRoom(room.id)
+    return
+  }
+
+  // Gomoku
+  if (room.count >= 2) {
+    spectateRoom(room.id)
     return
   }
   if (room.hasPassword) {
-    selectedRoomId.value = room.roomId
+    selectedRoomId.value = room.id
     inputPassword.value = ''
     isPasswordDialogOpen.value = true
     return
   }
-  joinRoom(room.roomId)
-}
-
-function handleCreateRoom() {
-  if (!newRoomName.value.trim()) return
-  createRoom(newRoomName.value.trim(), newRoomPassword.value.trim() || undefined)
-  newRoomName.value = ''
-  newRoomPassword.value = ''
-  isCreateDialogOpen.value = false
+  gomokuJoinRoom(room.id)
 }
 
 function handlePasswordSubmit() {
   if (!inputPassword.value.trim()) return
-  joinRoom(selectedRoomId.value, inputPassword.value.trim())
+  if (selectedRoomType.value === 'editor') {
+    editorJoinRoom(selectedRoomId.value, inputPassword.value.trim())
+  } else {
+    gomokuJoinRoom(selectedRoomId.value, inputPassword.value.trim())
+  }
   isPasswordDialogOpen.value = false
   inputPassword.value = ''
+}
+
+function handleCreateRoom() {
+  if (newRoomType.value === 'editor') {
+    if (!newRoomName.value.trim()) return
+    editorCreateRoom(newRoomName.value.trim(), newRoomPassword.value.trim() || undefined)
+    newRoomName.value = ''
+    newRoomPassword.value = ''
+    isCreateDialogOpen.value = false
+    return
+  }
+
+  if (!newRoomName.value.trim()) return
+  gomokuCreateRoom(newRoomName.value.trim(), newRoomPassword.value.trim() || undefined)
+  newRoomName.value = ''
+  newRoomPassword.value = ''
+  isCreateDialogOpen.value = false
 }
 
 function closeCreateDialog() {
   isCreateDialogOpen.value = false
   newRoomName.value = ''
   newRoomPassword.value = ''
+  newRoomType.value = 'gomoku'
 }
 
 function closePasswordDialog() {
@@ -75,9 +169,21 @@ function closePasswordDialog() {
   inputPassword.value = ''
 }
 
+// Navigate when gomoku room is created/joined
 watch(gameState, (state) => {
   if (state && currentRoomId.value) {
     router.push(`/gomoku/${currentRoomId.value}`)
+  }
+})
+
+// Navigate when editor room is created/joined
+editorSetOnRoomJoined((docId: string) => {
+  editorJoinedDocId.value = docId
+})
+
+watch(editorJoinedDocId, (docId) => {
+  if (docId) {
+    router.push(`/editor/${docId}`)
   }
 })
 
@@ -93,20 +199,22 @@ onMounted(() => {
       router.push('/')
       return
     }
-    connect(user.userId, user.username)
+    gomokuConnect(user.userId, user.username)
+    editorConnectToLobby(user.userId, user.username)
   } catch {
     router.push('/')
   }
 })
 
 onUnmounted(() => {
-  disconnect()
+  gomokuDisconnect()
+  editorDisconnect()
 })
 </script>
 
 <template>
   <div class="min-h-screen transition-colors" :class="isDark ? 'bg-[#18181B] text-gray-100' : 'bg-white text-gray-800'">
-    <!-- 顶部导航 -->
+    <!-- Header -->
     <header class="border-b px-6 py-5" :class="isDark ? 'border-gray-800' : 'border-gray-100'">
       <div class="max-w-7xl mx-auto flex items-center gap-4">
         <button
@@ -120,22 +228,22 @@ onUnmounted(() => {
           </svg>
         </button>
         <div class="flex-1">
-          <h1 class="text-lg font-semibold">五子棋对战大厅</h1>
+          <h1 class="text-lg font-semibold">应用大厅</h1>
         </div>
         <div class="flex items-center gap-3">
-          <!-- 连接状态 -->
+          <!-- Connection status -->
           <span class="flex items-center gap-1.5 text-xs" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
-            <span class="w-2 h-2 rounded-full" :class="isConnected ? 'bg-green-500' : 'bg-red-400'"></span>
-            {{ isConnected ? '已连接' : '未连接' }}
+            <span class="w-2 h-2 rounded-full" :class="(gomokuConnected && editorConnected) ? 'bg-green-500' : 'bg-red-400'"></span>
+            {{ (gomokuConnected && editorConnected) ? '已连接' : '连接中...' }}
           </span>
-          <!-- 在线房间数 -->
+          <!-- Room count -->
           <span
             class="text-xs px-2.5 py-1 rounded-full"
             :class="isDark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'"
           >
-            {{ rooms.length }} 个房间
+            {{ allRooms.length }} 个房间
           </span>
-          <!-- 创建房间按钮 -->
+          <!-- Create button -->
           <button
             @click="isCreateDialogOpen = true"
             class="px-4 py-2 text-xs font-medium rounded-xl bg-[#18181B] text-white hover:bg-[#27272A] transition-colors"
@@ -146,10 +254,10 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <!-- 主内容区 -->
+    <!-- Main -->
     <main class="max-w-7xl mx-auto px-6 py-8">
-      <!-- 空状态 -->
-      <div v-if="rooms.length === 0" class="flex flex-col items-center justify-center py-24">
+      <!-- Empty state -->
+      <div v-if="allRooms.length === 0" class="flex flex-col items-center justify-center py-24">
         <div class="w-12 h-12 rounded-full flex items-center justify-center mb-4" :class="isDark ? 'bg-gray-800' : 'bg-gray-100'">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" :class="isDark ? 'text-gray-500' : 'text-gray-400'">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -160,25 +268,31 @@ onUnmounted(() => {
         <p class="text-sm" :class="isDark ? 'text-gray-500' : 'text-gray-400'">暂无房间，点击右上角创建一个吧</p>
       </div>
 
-      <!-- 房间卡片网格 -->
+      <!-- Room grid -->
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div
-          v-for="room in rooms"
-          :key="room.roomId"
+          v-for="room in allRooms"
+          :key="room.type + '-' + room.id"
           class="rounded-2xl border p-5 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
           :class="isDark ? 'border-gray-700 bg-[#27272A] hover:border-gray-600' : 'border-gray-200 bg-white hover:border-gray-300'"
         >
-          <!-- 房间名称 + 状态标签 -->
+          <!-- Type badge + name + status -->
           <div class="flex items-center gap-2 mb-3">
+            <span class="text-[10px] px-1.5 py-0.5 rounded font-medium tracking-wide uppercase"
+              :class="room.type === 'gomoku'
+                ? (isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500')
+                : (isDark ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600')"
+            >{{ room.type === 'gomoku' ? '五子棋' : '编辑器' }}</span>
             <h3 class="font-medium text-sm truncate flex-1">{{ room.roomName }}</h3>
             <span
-              :class="['inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0', getStatusBadge(room.status).class]"
+              :class="['inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0',
+                room.type === 'gomoku' ? getGomokuStatusBadge(room.status).class : getEditorStatusBadge().class]"
             >
-              {{ getStatusBadge(room.status).label }}
+              {{ room.type === 'gomoku' ? getGomokuStatusBadge(room.status).label : getEditorStatusBadge().label }}
             </span>
           </div>
 
-          <!-- 房间信息 -->
+          <!-- Info -->
           <div class="flex items-center gap-4 text-xs mb-4" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
             <span class="flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -187,7 +301,7 @@ onUnmounted(() => {
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                 <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
               </svg>
-              {{ room.playerCount }}/2
+              {{ room.countLabel }}
             </span>
             <span v-if="room.hasPassword" class="flex items-center gap-1" title="需要密码">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -195,30 +309,25 @@ onUnmounted(() => {
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             </span>
-            <span v-if="room.spectatorCount > 0" class="flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-              {{ room.spectatorCount }}
-            </span>
           </div>
 
-          <!-- 操作按钮 -->
+          <!-- Action button -->
           <button
             @click="handleRoomClick(room)"
             class="w-full px-3 py-2 text-xs font-medium rounded-xl transition-colors"
-            :class="room.playerCount >= 2
-              ? (isDark ? 'border border-gray-600 text-gray-300 hover:bg-gray-700' : 'border border-gray-300 text-gray-700 hover:bg-gray-50')
-              : 'bg-[#18181B] text-white hover:bg-[#27272A]'"
+            :class="room.type === 'editor'
+              ? 'bg-[#18181B] text-white hover:bg-[#27272A]'
+              : (room.count >= 2
+                ? (isDark ? 'border border-gray-600 text-gray-300 hover:bg-gray-700' : 'border border-gray-300 text-gray-700 hover:bg-gray-50')
+                : 'bg-[#18181B] text-white hover:bg-[#27272A]')"
           >
-            {{ room.playerCount >= 2 ? '观战' : '加入对战' }}
+            {{ room.type === 'editor' ? '加入编辑' : (room.count >= 2 ? '观战' : '加入对战') }}
           </button>
         </div>
       </div>
     </main>
 
-    <!-- 创建房间对话框 -->
+    <!-- Create room dialog -->
     <Teleport to="body">
       <div v-if="isCreateDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="closeCreateDialog"></div>
@@ -228,6 +337,34 @@ onUnmounted(() => {
         >
           <h2 class="text-base font-semibold mb-5">创建房间</h2>
           <div class="space-y-4">
+            <!-- Room type selector -->
+            <div>
+              <label class="block text-xs font-medium mb-2" :class="isDark ? 'text-gray-300' : 'text-gray-700'">房间类型</label>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  @click="newRoomType = 'gomoku'"
+                  class="px-3 py-3 rounded-xl border text-xs font-medium transition-all"
+                  :class="newRoomType === 'gomoku'
+                    ? 'bg-[#18181B] text-white border-[#18181B]'
+                    : (isDark ? 'border-gray-600 text-gray-300 hover:border-gray-500' : 'border-gray-200 text-gray-600 hover:border-gray-300')"
+                >
+                  <div class="text-sm mb-0.5">五子棋</div>
+                  <div class="text-[10px] opacity-60">实时对战</div>
+                </button>
+                <button
+                  @click="newRoomType = 'editor'"
+                  class="px-3 py-3 rounded-xl border text-xs font-medium transition-all"
+                  :class="newRoomType === 'editor'
+                    ? 'bg-[#18181B] text-white border-[#18181B]'
+                    : (isDark ? 'border-gray-600 text-gray-300 hover:border-gray-500' : 'border-gray-200 text-gray-600 hover:border-gray-300')"
+                >
+                  <div class="text-sm mb-0.5">协作编辑</div>
+                  <div class="text-[10px] opacity-60">多人编码</div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Shared fields: name + password -->
             <div>
               <label class="block text-xs font-medium mb-1.5" :class="isDark ? 'text-gray-300' : 'text-gray-700'">房间名称</label>
               <input
@@ -277,7 +414,7 @@ onUnmounted(() => {
       </div>
     </Teleport>
 
-    <!-- 密码输入对话框 -->
+    <!-- Password dialog -->
     <Teleport to="body">
       <div v-if="isPasswordDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="closePasswordDialog"></div>

@@ -33,6 +33,16 @@ const routes = [
     name: 'gomoku-game',
     component: () => import('@/pages/GomokuGamePage.vue'),
   },
+  {
+    path: '/editor',
+    name: 'editor-new',
+    component: () => import('@/pages/EditorPage.vue'),
+  },
+  {
+    path: '/editor/:docId',
+    name: 'editor-room',
+    component: () => import('@/pages/EditorPage.vue'),
+  },
 ]
 
 // 创建路由实例
@@ -47,8 +57,10 @@ const titleMap: Record<string, string> = {
   chat: '聊天',
   admin: '管理后台',
   apps: '应用中心',
-  'gomoku-lobby': '五子棋大厅',
+  'gomoku-lobby': '应用大厅',
   'gomoku-game': '五子棋对局',
+  'editor-new': '协作编辑器',
+  'editor-room': '协作编辑器',
 }
 
 router.afterEach((to) => {

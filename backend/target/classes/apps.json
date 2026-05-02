@@ -49,5 +49,22 @@
         "description": "可视化代码算法的交互式平台，内含多种算法并进行了可视化动画呈现。",
         "status": "active",
         "descriptionMd": "/md/algorithm-visualizer.md"
+    },
+    {
+        "id": "collab-editor",
+        "title": "协作编辑器",
+        "subtitle": "多人实时协同编码",
+        "text": "基于 Yjs CRDT 的实时协作代码编辑器，支持 HTML/CSS/JS 预览",
+        "url": "/gomoku",
+        "img": "/img/editor.svg",
+        "techStack": [
+            "CodeMirror 6",
+            "Yjs",
+            "WebSocket"
+        ],
+        "usageScenario": "实时协作编码与前端预览",
+        "description": "基于 Yjs CRDT 的实时协作代码编辑器，支持多人同时编辑 HTML/CSS/JS 代码，并实时预览渲染结果。",
+        "status": "active",
+        "descriptionMd": "/md/collab-editor.md"
     }
 ]
