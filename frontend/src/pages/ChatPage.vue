@@ -194,7 +194,7 @@ const dismissProjectNotice = () => {
 const initChat = () => {
   const userData = localStorage.getItem('user')
   if (!userData) {
-    router.push('/')
+    router.push('/login')
     return
   }
 
@@ -306,7 +306,7 @@ const handleSendMessage = async () => {
 }
 
 const handleBack = () => {
-  router.push('/')
+  router.push('/login')
 }
 
 const formatTime = (timestamp: number) => {

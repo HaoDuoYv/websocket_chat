@@ -232,7 +232,7 @@ const handleClearLogs = async () => {
 }
 
 const handleBack = () => {
-  router.push('/')
+  router.push('/login')
 }
 
 const startAutoRefresh = () => {

@@ -1,12 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomePage from '@/pages/HomePage.vue'
+import LandingPage from '@/pages/LandingPage.vue'
 
-// 定义路由配置
 const routes = [
   {
     path: '/',
+    name: 'landing',
+    component: LandingPage,
+  },
+  {
+    path: '/login',
     name: 'home',
-    component: HomePage,
+    component: () => import('@/pages/HomePage.vue'),
   },
   {
     path: '/chat/:chatId',
@@ -45,14 +49,13 @@ const routes = [
   },
 ]
 
-// 创建路由实例
 const router = createRouter({
   history: createWebHistory(),
   routes,
 })
 
-// 页面标题映射
 const titleMap: Record<string, string> = {
+  landing: 'WebSocket Chat',
   home: '聊天',
   chat: '聊天',
   admin: '管理后台',

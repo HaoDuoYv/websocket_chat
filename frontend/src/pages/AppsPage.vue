@@ -52,7 +52,7 @@ function openUrl(url: string) {
 }
 
 function goBack() {
-  router.push('/')
+  router.push('/login')
 }
 
 onMounted(fetchApps)

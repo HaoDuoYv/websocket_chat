@@ -217,7 +217,7 @@ watch(joinFailed, (val) => {
 onMounted(() => {
   const userData = localStorage.getItem('user')
   if (!userData) {
-    router.push('/')
+    router.push('/login')
     return
   }
 

@@ -190,19 +190,19 @@ watch(editorJoinedDocId, (docId) => {
 onMounted(() => {
   const stored = localStorage.getItem('user')
   if (!stored) {
-    router.push('/')
+    router.push('/login')
     return
   }
   try {
     const user = JSON.parse(stored)
     if (!user?.userId || !user?.username) {
-      router.push('/')
+      router.push('/login')
       return
     }
     gomokuConnect(user.userId, user.username)
     editorConnectToLobby(user.userId, user.username)
   } catch {
-    router.push('/')
+    router.push('/login')
   }
 })
 
