@@ -502,7 +502,57 @@ const anyPreviewOpen = computed(() => !!previewingAttachment.value || !!previewi
 watch(anyPreviewOpen, open => {
   if (typeof document === 'undefined') return
   document.body.style.overflow = open ? 'hidden' : ''
+  // 重置缩放和旋转状态
+  if (!open) {
+    imageScale.value = 1
+    imageRotation.value = 0
+  }
 })
+
+// 图片预览增强功能
+const imageScale = ref(1)
+const imageRotation = ref(0)
+
+const zoomIn = () => {
+  imageScale.value = Math.min(imageScale.value * 1.2, 5)
+}
+
+const zoomOut = () => {
+  imageScale.value = Math.max(imageScale.value / 1.2, 0.5)
+}
+
+const resetZoom = () => {
+  imageScale.value = 1
+  imageRotation.value = 0
+}
+
+const rotateImage = () => {
+  imageRotation.value = (imageRotation.value + 90) % 360
+}
+
+const handleImagePreviewKeydown = (event: KeyboardEvent) => {
+  if (!anyPreviewOpen.value) return
+  
+  switch (event.key) {
+    case 'Escape':
+      closeAttachmentPreview()
+      break
+    case '+':
+    case '=':
+      zoomIn()
+      break
+    case '-':
+      zoomOut()
+      break
+    case '0':
+      resetZoom()
+      break
+    case 'r':
+    case 'R':
+      rotateImage()
+      break
+  }
+}
 
 watch(activeTab, value => {
   localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, value)
@@ -1127,19 +1177,19 @@ const isRoomReadByOthers = (roomId: string): boolean => {
       <nav class="flex-1 flex flex-col gap-2">
         <button
           @click="activeTab = 'messages'"
-          class="w-10 h-10 flex items-center justify-center transition-all duration-200"
-          :class="activeTab === 'messages' ? (isDarkTheme ? 'bg-white/10 text-white' : 'bg-[#18181B] text-white') : (isDarkTheme ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-700')"
+          class="w-10 h-10 flex items-center justify-center transition-all duration-200 rounded-xl btn-press relative"
+          :class="activeTab === 'messages' ? (isDarkTheme ? 'bg-white/10 text-white shadow-sm' : 'bg-[#18181B] text-white shadow-md') : (isDarkTheme ? 'text-gray-400 hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
-          <span v-if="rooms.some(r => getUnreadCount(r.id) > 0)" class="absolute top-4 left-8 w-2 h-2 bg-[#525252] rounded-full"></span>
+          <span v-if="rooms.some(r => getUnreadCount(r.id) > 0)" class="absolute top-1 right-1 w-2 h-2 bg-[#525252] rounded-full animate-pulse"></span>
         </button>
 
         <button
           @click="activeTab = 'contacts'"
-          class="w-10 h-10 flex items-center justify-center transition-all duration-200"
-          :class="activeTab === 'contacts' ? (isDarkTheme ? 'bg-white/10 text-white' : 'bg-[#18181B] text-white') : (isDarkTheme ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-700')"
+          class="w-10 h-10 flex items-center justify-center transition-all duration-200 rounded-xl btn-press"
+          :class="activeTab === 'contacts' ? (isDarkTheme ? 'bg-white/10 text-white shadow-sm' : 'bg-[#18181B] text-white shadow-md') : (isDarkTheme ? 'text-gray-400 hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -1151,8 +1201,8 @@ const isRoomReadByOthers = (roomId: string): boolean => {
 
         <button
           @click="router.push('/apps')"
-          class="w-10 h-10 flex items-center justify-center transition-all duration-200"
-          :class="isDarkTheme ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'"
+          class="w-10 h-10 flex items-center justify-center transition-all duration-200 rounded-xl btn-press"
+          :class="isDarkTheme ? 'text-gray-400 hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"/>
@@ -1974,11 +2024,13 @@ const isRoomReadByOthers = (roomId: string): boolean => {
     >
       <div
         v-if="previewingAttachment || previewingSentImage"
-        class="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
+        class="fixed inset-0 z-[70] flex items-center justify-center bg-black/95 p-4"
         @click.self="closeAttachmentPreview"
+        @keydown="handleImagePreviewKeydown"
+        tabindex="0"
       >
         <!-- 顶部信息栏 -->
-        <div class="absolute inset-x-0 top-0 flex items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-6 py-4 text-white">
+        <div class="absolute inset-x-0 top-0 flex items-center justify-between gap-4 bg-gradient-to-b from-black/80 to-transparent px-6 py-4 text-white z-10">
           <div class="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -1994,11 +2046,71 @@ const isRoomReadByOthers = (roomId: string): boolean => {
               {{ previewingAttachment?.file.name || previewingSentImage?.fileName }}
             </p>
           </div>
-          <div class="flex items-center gap-3 shrink-0">
-            <span class="text-sm opacity-80">{{ formatFileSize(previewingAttachment?.file.size || previewingSentImage?.fileSize || 0) }}</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="text-sm opacity-80 mr-2">{{ formatFileSize(previewingAttachment?.file.size || previewingSentImage?.fileSize || 0) }}</span>
+            
+            <!-- 缩放控制 -->
+            <div class="flex items-center gap-1 bg-white/10 rounded-full px-2 py-1">
+              <button
+                type="button"
+                class="p-1.5 rounded-full transition-colors hover:bg-white/20"
+                @click="zoomOut"
+                title="缩小 (-)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  <line x1="8" y1="11" x2="14" y2="11"/>
+                </svg>
+              </button>
+              <span class="text-xs min-w-[3rem] text-center">{{ Math.round(imageScale * 100) }}%</span>
+              <button
+                type="button"
+                class="p-1.5 rounded-full transition-colors hover:bg-white/20"
+                @click="zoomIn"
+                title="放大 (+)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  <line x1="11" y1="8" x2="11" y2="14"/>
+                  <line x1="8" y1="11" x2="14" y2="11"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- 旋转控制 -->
             <button
               type="button"
-              class="shrink-0 rounded-full p-2 transition-colors hover:bg-white/10"
+              class="rounded-full p-2 transition-colors hover:bg-white/10"
+              @click="rotateImage"
+              title="旋转 (R)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6"/>
+                <path d="M2.5 22v-6h6"/>
+                <path d="M2 11.5a10 10 0 0 1 18.8-4.3"/>
+                <path d="M22 12.5a10 10 0 0 1-18.8 4.2"/>
+              </svg>
+            </button>
+
+            <!-- 重置 -->
+            <button
+              type="button"
+              class="rounded-full p-2 transition-colors hover:bg-white/10"
+              @click="resetZoom"
+              title="重置 (0)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+            </button>
+
+            <!-- 下载 -->
+            <button
+              type="button"
+              class="rounded-full p-2 transition-colors hover:bg-white/10"
               @click="downloadPreviewedAttachment"
               title="下载"
             >
@@ -2010,14 +2122,35 @@ const isRoomReadByOthers = (roomId: string): boolean => {
             </button>
           </div>
         </div>
+        
         <img
           :src="previewingAttachment?.previewUrl || previewingSentImage?.fileUrl"
           :alt="previewingAttachment?.file.name || previewingSentImage?.fileName"
-          class="max-h-[80vh] max-w-[90vw] rounded-lg object-contain transition-transform duration-300 ease-out"
+          class="max-h-[80vh] max-w-[90vw] rounded-lg object-contain transition-transform duration-300 ease-out select-none"
+          :style="{ transform: `scale(${imageScale}) rotate(${imageRotation}deg)` }"
+          draggable="false"
         />
-        <!-- 底部操作提示 -->
-        <div class="absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-black/60 to-transparent px-6 py-4">
-          <p class="text-xs text-white/60">点击空白区域关闭预览</p>
+        
+        <!-- 底部快捷键提示 -->
+        <div class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-6 bg-gradient-to-t from-black/80 to-transparent px-6 py-4">
+          <div class="flex items-center gap-4 text-xs text-white/60">
+            <span class="flex items-center gap-1">
+              <kbd class="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">+/-</kbd>
+              缩放
+            </span>
+            <span class="flex items-center gap-1">
+              <kbd class="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">R</kbd>
+              旋转
+            </span>
+            <span class="flex items-center gap-1">
+              <kbd class="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">0</kbd>
+              重置
+            </span>
+            <span class="flex items-center gap-1">
+              <kbd class="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">ESC</kbd>
+              关闭
+            </span>
+          </div>
         </div>
       </div>
     </Transition>

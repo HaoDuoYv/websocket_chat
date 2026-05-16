@@ -519,28 +519,29 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
 
             <div
               :class="[
-                'flex gap-3 mb-4',
+                'flex gap-3 mb-4 bubble-pop',
                 String(message.senderId) === user?.userId ? 'flex-row-reverse' : 'flex-row'
               ]"
             >
               <div
-                class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium"
+                class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
                 :style="{ backgroundColor: getAvatarColor(String(message.senderId)) }"
               >
                 {{ getAvatarText(message.senderName) }}
               </div>
 
               <div :class="['flex flex-col max-w-[65%]', String(message.senderId) === user?.userId ? 'items-end' : 'items-start']">
-                <div v-if="String(message.senderId) !== user?.userId" class="text-xs mb-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
+                <div v-if="String(message.senderId) !== user?.userId" class="text-xs mb-1 ml-1" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">
                   {{ message.senderName }}
                 </div>
 
                 <div
                   :class="[
-                    isImageMessage(message) ? 'px-1 py-1' : 'px-4 py-2 text-sm',
+                    'transition-all duration-200',
+                    isImageMessage(message) ? 'px-1 py-1 rounded-2xl' : 'px-4 py-3 text-sm rounded-2xl',
                     String(message.senderId) === user?.userId
-                      ? 'bg-[#18181B] text-white'
-                      : (isDarkTheme ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700')
+                      ? 'bg-[#18181B] text-white shadow-md rounded-br-md'
+                      : (isDarkTheme ? 'bg-gray-800 text-gray-100 shadow-sm rounded-bl-md' : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md')
                   ]"
                 >
                   <div v-if="message.type === 'file' && message.fileId" class="min-w-[200px]">
@@ -553,10 +554,17 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
                     />
                   </div>
 
-                  <div v-else>{{ message.content }}</div>
+                  <div v-else class="leading-relaxed">{{ message.content }}</div>
                 </div>
 
-                <div class="text-xs mt-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">{{ formatTime(message.timestamp) }}</div>
+                <div class="flex items-center gap-1 mt-1 text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
+                  <span>{{ formatTime(message.timestamp) }}</span>
+                  <span v-if="String(message.senderId) === user?.userId" class="flex items-center">
+                    <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                  </span>
+                </div>
               </div>
             </div>
           </template>
@@ -662,22 +670,22 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
               @keyup.enter="handleSendMessage"
               type="text"
               placeholder="输入消息"
-              class="w-full px-0 py-2 bg-transparent border-0 border-b text-sm focus:outline-none focus:border-[#18181B] transition-colors"
-              :class="isDarkTheme ? 'border-gray-700 text-gray-200 placeholder-gray-500' : 'border-gray-200 text-gray-700 placeholder-gray-400'"
+              class="w-full px-3 py-2.5 bg-transparent border border-[#E5E5E5] rounded-xl text-sm focus:outline-none focus:border-[#18181B] focus:ring-2 focus:ring-[#18181B]/10 transition-all duration-200 input-glow"
+              :class="isDarkTheme ? 'border-gray-700 text-gray-200 placeholder-gray-500 bg-gray-800/50' : 'border-gray-200 text-gray-700 placeholder-gray-400'"
             />
           </div>
 
           <button
             @click="handleSendMessage"
             :disabled="!canSend"
-            class="w-8 h-8 bg-[#18181B] hover:bg-[#27272A] text-white flex items-center justify-center transition-colors"
+            class="w-10 h-10 bg-[#18181B] hover:bg-[#27272A] text-white flex items-center justify-center transition-all duration-200 rounded-xl btn-press disabled:opacity-40"
             :class="isDarkTheme ? 'disabled:bg-gray-800' : 'disabled:bg-gray-200'"
           >
-            <svg v-if="!isSendingFiles" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-if="!isSendingFiles" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/>
               <polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
-            <svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
           </button>

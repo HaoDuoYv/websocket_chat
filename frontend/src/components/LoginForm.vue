@@ -64,11 +64,11 @@ const toggleMode = () => {
       <div class="absolute top-1/3 right-20 w-24 h-24 bg-black/[0.02]"></div>
     </div>
 
-    <!-- 主卡片 -->
-    <div class="relative w-full max-w-sm">
+      <!-- 主卡片 -->
+    <div class="relative w-full max-w-sm slide-up">
       <!-- Logo区域 - 极简几何 -->
       <div class="text-center mb-10">
-        <div class="w-14 h-14 bg-[#18181B] flex items-center justify-center mx-auto mb-5">
+        <div class="w-14 h-14 bg-[#18181B] flex items-center justify-center mx-auto mb-5 shadow-lg rounded-2xl hover-lift">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
@@ -78,7 +78,7 @@ const toggleMode = () => {
       </div>
 
       <!-- 表单卡片 -->
-      <div class="bg-white p-8 shadow-sm border border-[#E5E5E5]">
+      <div class="bg-white p-8 shadow-lg border border-[#E5E5E5] rounded-2xl">
         <div class="mb-6">
           <h2 class="text-base font-medium text-[#18181B]">
             {{ isRegisterMode ? '创建账号' : '欢迎回来' }}
@@ -95,7 +95,7 @@ const toggleMode = () => {
               v-model="username"
               type="text"
               placeholder="请输入用户名"
-              class="w-full px-0 py-3 bg-transparent border-0 border-b border-[#E5E5E5] text-sm text-[#18181B] placeholder-[#A3A3A3] focus:outline-none focus:border-[#18181B] transition-colors"
+              class="w-full px-0 py-3 bg-transparent border-0 border-b border-[#E5E5E5] text-sm text-[#18181B] placeholder-[#A3A3A3] focus:outline-none focus:border-[#18181B] transition-all duration-200 input-glow"
               :disabled="isLoading"
               maxlength="32"
             />
@@ -103,7 +103,7 @@ const toggleMode = () => {
           </div>
 
           <!-- 错误提示 -->
-          <div v-if="errorMsg" class="flex items-center gap-2 text-red-600 text-xs py-2">
+          <div v-if="errorMsg" class="flex items-center gap-2 text-red-600 text-xs py-2 fade-in">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/>
               <line x1="15" y1="9" x2="9" y2="15"/>
@@ -115,7 +115,7 @@ const toggleMode = () => {
           <!-- 提交按钮 -->
           <button
             type="submit"
-            class="w-full py-3.5 bg-[#18181B] hover:bg-[#27272A] text-white text-sm font-medium transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="w-full py-3.5 bg-[#18181B] hover:bg-[#27272A] text-white text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl btn-press"
             :disabled="isLoading || !username.trim()"
           >
             <span v-if="isLoading" class="flex items-center justify-center gap-2">
@@ -132,7 +132,7 @@ const toggleMode = () => {
         <div class="mt-6 pt-4 border-t border-[#F5F5F5] text-center">
           <button
             @click="toggleMode"
-            class="text-xs text-[#525252] hover:text-[#18181B] font-medium transition-colors"
+            class="text-xs text-[#525252] hover:text-[#18181B] font-medium transition-colors btn-press"
           >
             {{ isRegisterMode ? '已有账号？立即登录' : '没有账号？立即注册' }}
           </button>

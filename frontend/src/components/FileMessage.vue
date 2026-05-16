@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { formatFileSize, getFileIcon, isImageFile, getFileTypeDescription, isVideoFile } from '@/api/file'
 
 interface Props {
@@ -16,6 +16,19 @@ const emit = defineEmits<{
 }>()
 const imageMessage = computed(() => isImageFile(props.fileType))
 const videoMessage = computed(() => isVideoFile(props.fileType))
+
+// 图片加载状态
+const imageLoaded = ref(false)
+const imageError = ref(false)
+
+const handleImageLoad = () => {
+  imageLoaded.value = true
+}
+
+const handleImageError = () => {
+  imageError.value = true
+  imageLoaded.value = true
+}
 
 const handleDownload = async () => {
   try {
@@ -66,14 +79,50 @@ const handlePreview = () => {
   <div class="space-y-2">
     <!-- 图片文件 -->
     <div v-if="imageMessage" class="inline-flex max-w-full flex-col items-start gap-2">
-      <div class="group relative overflow-hidden rounded-[24px] border shadow-sm ring-1 ring-inset transition-all duration-300 hover:scale-[1.02] hover:shadow-md"
-        :class="isDark ? 'border-gray-700/80 bg-gray-900/70 ring-white/10' : 'border-blue-400 bg-gray-100 ring-blue-200/70'">
+      <div class="group relative overflow-hidden rounded-2xl border shadow-sm ring-1 ring-inset transition-all duration-300 hover:scale-[1.02] hover:shadow-md"
+        :class="isDark ? 'border-gray-700/80 bg-gray-900/70 ring-white/10' : 'border-gray-200 bg-gray-50 ring-gray-100'">
+        
+        <!-- 加载占位符 -->
+        <div 
+          v-if="!imageLoaded"
+          class="absolute inset-0 flex items-center justify-center"
+          :class="isDark ? 'bg-gray-800' : 'bg-gray-100'"
+        >
+          <div class="flex flex-col items-center gap-2">
+            <svg class="animate-spin text-gray-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+            <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">加载中...</span>
+          </div>
+        </div>
+
+        <!-- 错误状态 -->
+        <div 
+          v-if="imageError"
+          class="absolute inset-0 flex items-center justify-center"
+          :class="isDark ? 'bg-gray-800' : 'bg-gray-100'"
+        >
+          <div class="flex flex-col items-center gap-2">
+            <svg class="text-gray-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">加载失败</span>
+          </div>
+        </div>
+
         <img
           :src="props.fileUrl"
           :alt="fileName"
-          class="block max-h-[360px] max-w-[220px] cursor-zoom-in object-cover sm:max-w-[260px] md:max-w-[320px] transition-transform duration-500 hover:scale-105"
+          :class="[
+            'block max-h-[360px] max-w-[220px] cursor-zoom-in object-cover sm:max-w-[260px] md:max-w-[320px] transition-all duration-500 hover:scale-105',
+            imageLoaded ? 'opacity-100' : 'opacity-0'
+          ]"
           loading="lazy"
           @click="handlePreview"
+          @load="handleImageLoad"
+          @error="handleImageError"
         />
 
         <!-- 图片信息叠加层 -->
@@ -117,21 +166,42 @@ const handlePreview = () => {
 
     <!-- 视频文件 -->
     <div v-else-if="videoMessage" class="inline-flex max-w-full flex-col items-start gap-2">
-      <div class="relative overflow-hidden rounded-[16px] border shadow-sm ring-1 ring-inset"
-        :class="isDark ? 'border-gray-700/80 bg-gray-900/70 ring-white/10' : 'border-blue-400 bg-gray-100 ring-blue-200/70'">
+      <div class="group relative overflow-hidden rounded-2xl border shadow-sm ring-1 ring-inset transition-all duration-300 hover:shadow-md"
+        :class="isDark ? 'border-gray-700/80 bg-gray-900/70 ring-white/10' : 'border-gray-200 bg-gray-50 ring-gray-100'">
         <video
           :src="props.fileUrl"
-          class="block max-h-[300px] max-w-[260px] sm:max-w-[320px] object-cover"
+          class="block max-h-[300px] max-w-[280px] sm:max-w-[340px] object-cover rounded-xl"
           controls
           preload="metadata"
           playsinline
         >
           您的浏览器不支持视频播放
         </video>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="text-xs" :class="isDark ? 'text-gray-400' : 'text-gray-500'">{{ fileName }}</span>
-        <span class="text-xs opacity-60" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ formatFileSize(fileSize) }}</span>
+        
+        <!-- 视频信息叠加层 -->
+        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+          <div class="flex items-center justify-between">
+            <span class="text-white text-xs font-medium truncate">{{ fileName }}</span>
+            <span class="text-white/80 text-xs">{{ formatFileSize(fileSize) }}</span>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="flex absolute right-3 top-3 gap-2">
+          <button
+            type="button"
+            class="rounded-full px-2.5 py-1 text-[11px] opacity-0 shadow-sm transition-all group-hover:opacity-100"
+            :class="isDark ? 'bg-gray-900/80 text-white hover:bg-gray-900' : 'bg-white/90 text-gray-700 hover:bg-white'"
+            @click="handleDownload"
+            title="下载"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 

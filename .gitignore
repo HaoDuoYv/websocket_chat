@@ -9,7 +9,7 @@ yarn.lock
 # Production build
 dist/
 build/
-
+AGENTS.md
 # Environment variables
 .env
 .env.local
