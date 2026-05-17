@@ -29,7 +29,8 @@ const fileExtension = computed(() => {
 })
 
 const isMarkdown = computed(() => ['md', 'markdown'].includes(fileExtension.value))
-const isWord = computed(() => ['doc', 'docx'].includes(fileExtension.value))
+const isDocx = computed(() => fileExtension.value === 'docx')
+const isDoc = computed(() => fileExtension.value === 'doc')
 const isPdf = computed(() => props.file ? isPdfFile(props.file.fileType) : false)
 const isText = computed(() => props.file ? isTextFile(props.file.fileType) || isCodeFile(props.file.fileName) : false)
 const isImage = computed(() => props.file ? isImageFile(props.file.fileType, props.file.fileName) : false)
@@ -39,7 +40,8 @@ const previewMode = computed(() => {
   if (isImage.value) return 'image'
   if (isVideo.value) return 'video'
   if (isPdf.value) return 'pdf'
-  if (isWord.value) return 'word'
+  if (isDocx.value) return 'word'
+  if (isDoc.value) return 'doc-old'
   if (isMarkdown.value) return 'markdown'
   if (isText.value) return 'text'
   return 'unsupported'
@@ -217,9 +219,29 @@ const download = () => {
           <div
             v-else-if="previewMode === 'word' || previewMode === 'markdown'"
             class="mx-auto max-w-4xl rounded-xl bg-white p-8 shadow-2xl prose prose-sm prose-slate max-w-none"
-            :class="{ 'prose-invert bg-gray-900': false }"
             v-html="htmlContent"
           ></div>
+
+          <!-- 旧版 .doc 格式 -->
+          <div v-else-if="previewMode === 'doc-old'" class="flex h-full items-center justify-center">
+            <div class="flex flex-col items-center gap-4 text-white">
+              <div class="text-6xl">📝</div>
+              <p class="text-lg font-medium">{{ file.fileName }}</p>
+              <p class="text-sm opacity-80">旧版 .doc 格式暂不支持在线预览</p>
+              <p class="text-xs opacity-60">仅支持 .docx 格式的在线预览，当前文件为旧版 .doc 格式</p>
+              <button
+                @click="download"
+                class="mt-2 flex items-center gap-2 rounded-lg bg-white/10 px-6 py-3 text-sm transition-colors hover:bg-white/20"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                下载文件
+              </button>
+            </div>
+          </div>
 
           <!-- 文本/代码预览 -->
           <div v-else-if="previewMode === 'text'" class="mx-auto max-w-4xl">
