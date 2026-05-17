@@ -1,57 +1,12 @@
 import { ref, onUnmounted } from 'vue'
-
-interface User {
-  userId: string
-  username: string
-  isOnline?: boolean
-}
-
-interface FileInfo {
-  fileId: string
-  fileName: string
-  fileUrl: string
-  fileSize: number
-  fileType: string
-}
-
-interface Message {
-  id: string
-  roomId: string
-  content: string
-  senderId: string
-  senderName: string
-  timestamp: number
-  seq: number
-  type?: 'text' | 'file' | 'system'
-  fileInfo?: FileInfo
-  fileId?: string
-  fileName?: string
-  fileUrl?: string
-  fileSize?: number
-  fileType?: string
-}
-
-interface Room {
-  id: string
-  name: string
-  type: 'public' | 'private'
-  ownerId?: string
-  createdAt: number
-  lastMessage?: Message
-}
+import { storeToRefs } from 'pinia'
+import { useChatStore } from '@/stores/chat'
+import type { Message, User, FileInfo, Room } from '@/stores/chat'
 
 interface WebSocketEvent {
   type: string
   data: any
 }
-
-interface InviteResult {
-  success: boolean
-  message: string
-  targetUserId?: string
-}
-
-const normalizeMessageFileUrl = <T extends Message>(message: T): T => message
 
 function requestNotificationPermission() {
   if ('Notification' in window && Notification.permission === 'default') {
@@ -65,48 +20,54 @@ function showMessageNotification(senderName: string, body: string) {
   }
 }
 
-interface BannedResult {
-  message: string
-}
-
-interface RoomMemberLeftEvent {
-  roomId: string
-  userId: string
-}
-
 export function useWebSocket() {
+  const store = useChatStore()
+  const {
+    isConnected,
+    reconnectAttempts,
+    messages,
+    rooms,
+    onlineUsers,
+    unreadCounts,
+    lastMessage,
+    lastInviteResult,
+    lastBannedResult,
+    lastRoomMemberLeft,
+    lastPrivateRoomCreated,
+    roomLastSeq,
+    readReceipts
+  } = storeToRefs(store)
+
   const socket = ref<WebSocket | null>(null)
-  const isConnected = ref(false)
-  const messages = ref<Message[]>([])
-  const rooms = ref<Room[]>([])
-  const onlineUsers = ref<User[]>([])
-  const unreadCounts = ref<Record<string, number>>({})
-  const currentRoomId = ref<string>('')
-  const lastMessage = ref<Message | null>(null)
-  const lastInviteResult = ref<InviteResult | null>(null)
-  const lastBannedResult = ref<BannedResult | null>(null)
-  const lastRoomMemberLeft = ref<RoomMemberLeftEvent | null>(null)
-  const lastPrivateRoomCreated = ref<{ id: string; name: string; type: string } | null>(null)
-
-  // 每个房间的最后读取序列号（用于增量同步）
-  const roomLastSeq = ref<Record<string, number>>({})
-
-  // 已读回执：roomId -> 已读用户 ID 集合
-  const readReceipts = ref<Map<string, Set<string>>>(new Map())
 
   let currentUserId = ''
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let currentUser: User | null = null
+  const MAX_RECONNECT_ATTEMPTS = 10
+  const BASE_RECONNECT_DELAY = 1000
 
   const connect = (user: User) => {
     currentUserId = user.userId
+    currentUser = user
+    store.reconnectAttempts = 0
+    doConnect(user)
+  }
+
+  const doConnect = (user: User) => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+
     socket.value = new WebSocket('/ws/chat')
 
     socket.value.onopen = () => {
       console.log('WebSocket connected')
       isConnected.value = true
+      reconnectAttempts.value = 0
 
       requestNotificationPermission()
 
-      // 发送用户加入事件
       const joinEvent: WebSocketEvent = {
         type: 'user:join',
         data: {
@@ -116,7 +77,6 @@ export function useWebSocket() {
       }
       socket.value?.send(JSON.stringify(joinEvent))
 
-      // 请求房间列表
       const listEvent: WebSocketEvent = {
         type: 'room:list',
         data: {
@@ -125,14 +85,12 @@ export function useWebSocket() {
       }
       socket.value?.send(JSON.stringify(listEvent))
 
-      // 请求在线用户列表
       const userListEvent: WebSocketEvent = {
         type: 'user:list',
         data: {}
       }
       socket.value?.send(JSON.stringify(userListEvent))
 
-      // 执行增量同步
       setTimeout(() => {
         syncRooms()
       }, 500)
@@ -150,6 +108,15 @@ export function useWebSocket() {
     socket.value.onclose = () => {
       console.log('WebSocket disconnected')
       isConnected.value = false
+
+      if (currentUser && reconnectAttempts.value < MAX_RECONNECT_ATTEMPTS) {
+        const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts.value), 30000)
+        reconnectAttempts.value++
+        console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts.value}/${MAX_RECONNECT_ATTEMPTS})...`)
+        reconnectTimer = setTimeout(() => {
+          doConnect(currentUser!)
+        }, delay)
+      }
     }
 
     socket.value.onerror = (error) => {
@@ -159,62 +126,47 @@ export function useWebSocket() {
 
   const handleEvent = (event: WebSocketEvent) => {
     switch (event.type) {
-      case 'user:joined':
-        console.log('User joined:', event.data)
+      case 'user:joined': {
         const newUser = event.data as User
-        const existingUserIndex = onlineUsers.value.findIndex(u => u.userId === newUser.userId)
-        if (existingUserIndex === -1) {
+        const existingIndex = onlineUsers.value.findIndex(u => u.userId === newUser.userId)
+        if (existingIndex === -1) {
           onlineUsers.value.push(newUser)
         } else {
-          onlineUsers.value[existingUserIndex] = {
-            ...onlineUsers.value[existingUserIndex],
+          onlineUsers.value[existingIndex] = {
+            ...onlineUsers.value[existingIndex],
             ...newUser,
             isOnline: true
           }
         }
         break
+      }
 
-      case 'user:left':
-        console.log('User left:', event.data)
+      case 'user:left': {
         const leftUserId = event.data.userId as string
-        const existingLeftUserIndex = onlineUsers.value.findIndex(u => u.userId === leftUserId)
-        if (existingLeftUserIndex !== -1) {
-          onlineUsers.value[existingLeftUserIndex] = {
-            ...onlineUsers.value[existingLeftUserIndex],
+        const leftIndex = onlineUsers.value.findIndex(u => u.userId === leftUserId)
+        if (leftIndex !== -1) {
+          onlineUsers.value[leftIndex] = {
+            ...onlineUsers.value[leftIndex],
             ...(event.data as User),
             isOnline: false
           }
         }
         break
+      }
 
-      case 'message:new':
+      case 'message:new': {
         const receivedMsg = event.data as Message
-        console.log('Received message:', receivedMsg)
-        messages.value.push(receivedMsg)
-        lastMessage.value = receivedMsg
-
-        const roomIndex = rooms.value.findIndex(r => r.id === String(receivedMsg.roomId))
-        if (roomIndex !== -1) {
-          rooms.value[roomIndex].lastMessage = receivedMsg
-        }
-
-        if (currentRoomId.value !== String(receivedMsg.roomId)) {
-          const roomId = String(receivedMsg.roomId)
-  unreadCounts.value[roomId] = (unreadCounts.value[roomId] || 0) + 1
-        }
-
+        store.addMessage(receivedMsg)
         if (String(receivedMsg.senderId) === currentUserId) {
           readReceipts.value.delete(String(receivedMsg.roomId))
         }
-
         showMessageNotification(receivedMsg.senderName, receivedMsg.content.slice(0, 50))
         break
+      }
 
-      case 'message:new:file':
+      case 'message:new:file': {
         const fileMsgData = event.data
-        console.log('Received file message:', fileMsgData)
-
-        const fileMessage = normalizeMessageFileUrl({
+        const fileMessage: Message = {
           id: fileMsgData.id,
           roomId: String(fileMsgData.roomId),
           content: fileMsgData.content,
@@ -228,59 +180,41 @@ export function useWebSocket() {
           fileUrl: fileMsgData.fileUrl,
           fileSize: fileMsgData.fileSize,
           fileType: fileMsgData.fileType
-        })
-
-        messages.value.push(fileMessage)
-        lastMessage.value = fileMessage
-
-        const fileRoomIndex = rooms.value.findIndex(r => r.id === String(fileMsgData.roomId))
-        if (fileRoomIndex !== -1) {
-          rooms.value[fileRoomIndex].lastMessage = fileMessage
         }
-
-        if (currentRoomId.value !== String(fileMsgData.roomId)) {
-          const roomId = String(fileMsgData.roomId)
-          unreadCounts.value[roomId] = (unreadCounts.value[roomId] || 0) + 1
-        }
-
+        store.addMessage(fileMessage)
         if (String(fileMsgData.senderId) === currentUserId) {
           readReceipts.value.delete(String(fileMsgData.roomId))
         }
-
         showMessageNotification(fileMsgData.senderName, '[文件]')
         break
+      }
 
-      case 'message:history:response':
+      case 'message:history:response': {
         const historyData = event.data as { roomId: string; messages: Message[] }
-        console.log('Received history:', historyData)
-        // 将历史消息添加到 messages 数组（避免重复）
         const existingIds = new Set(messages.value.map(m => m.id))
         historyData.messages.forEach(msg => {
           if (!existingIds.has(msg.id)) {
-            const normalizedMsg = normalizeMessageFileUrl({
-              ...msg,
-              type: 'file'
-            })
-            messages.value.push(normalizedMsg)
+            messages.value.push(msg)
           }
         })
+        store.trimMessages()
         break
+      }
 
-      case 'room:created':
+      case 'room:created': {
         const newRoom = event.data as Room
         rooms.value.push(newRoom)
         break
+      }
 
-      case 'room:invite':
-        // 被邀请加入群聊
+      case 'room:invite': {
         const invitedRoom = event.data as Room
-        console.log('被邀请加入房间:', invitedRoom)
-        // 检查是否已存在
         const existingInvitedRoom = rooms.value.find(r => r.id === invitedRoom.id)
         if (!existingInvitedRoom) {
           rooms.value.push(invitedRoom)
         }
         break
+      }
 
       case 'room:invite:success':
         lastInviteResult.value = {
@@ -304,16 +238,7 @@ export function useWebSocket() {
         disconnect()
         break
 
-      case 'room:joined':
-        console.log('Joined room:', event.data)
-        break
-
-      case 'room:member:joined':
-        console.log('Room member joined:', event.data)
-        break
-
       case 'room:member:left':
-        console.log('Room member left:', event.data)
         lastRoomMemberLeft.value = {
           roomId: String(event.data.roomId),
           userId: String(event.data.userId)
@@ -324,37 +249,33 @@ export function useWebSocket() {
         rooms.value = event.data.rooms || []
         break
 
-      case 'room:private:created':
+      case 'room:private:created': {
         const privateRoom = event.data as Room
         lastPrivateRoomCreated.value = { id: String(privateRoom.id), name: privateRoom.name, type: privateRoom.type }
-        // 检查是否已存在
         const existingRoom = rooms.value.find(r => r.id === privateRoom.id)
         if (!existingRoom) {
           rooms.value.push(privateRoom)
         }
         break
+      }
 
-      case 'room:sync:response':
+      case 'room:sync:response': {
         const syncData = event.data as { messages: Message[] }
-        console.log('Received sync messages:', syncData)
         if (syncData.messages) {
           const existingIds = new Set(messages.value.map(m => m.id))
           syncData.messages.forEach(msg => {
             if (!existingIds.has(msg.id)) {
-                const normalizedMsg = normalizeMessageFileUrl({
-                  ...msg,
-                  type: 'file'
-                })
-                messages.value.push(normalizedMsg)
+              messages.value.push(msg)
             }
-            // 更新房间的最后序列号
             const roomId = String(msg.roomId)
             if (!roomLastSeq.value[roomId] || msg.seq > roomLastSeq.value[roomId]) {
               roomLastSeq.value[roomId] = msg.seq
             }
           })
+          store.trimMessages()
         }
         break
+      }
 
       case 'user:list:response':
         onlineUsers.value = event.data.users || []
@@ -378,10 +299,7 @@ export function useWebSocket() {
   const sendMessage = (roomId: string, content: string, _senderId: string) => {
     const messageEvent: WebSocketEvent = {
       type: 'message:send',
-      data: {
-        roomId: roomId,
-        content
-      }
+      data: { roomId, content }
     }
     socket.value?.send(JSON.stringify(messageEvent))
   }
@@ -390,7 +308,7 @@ export function useWebSocket() {
     const fileMessageEvent: WebSocketEvent = {
       type: 'message:send:file',
       data: {
-        roomId: roomId,
+        roomId,
         fileId: fileInfo.fileId,
         fileName: fileInfo.fileName,
         fileUrl: fileInfo.fileUrl,
@@ -404,10 +322,7 @@ export function useWebSocket() {
   const createRoom = (name: string, participants: string[]) => {
     const createEvent: WebSocketEvent = {
       type: 'room:create',
-      data: {
-        name,
-        participants
-      }
+      data: { name, participants }
     }
     socket.value?.send(JSON.stringify(createEvent))
   }
@@ -415,9 +330,7 @@ export function useWebSocket() {
   const joinRoom = (roomId: string) => {
     const joinEvent: WebSocketEvent = {
       type: 'room:join',
-      data: {
-        roomId: roomId
-      }
+      data: { roomId }
     }
     socket.value?.send(JSON.stringify(joinEvent))
   }
@@ -426,10 +339,7 @@ export function useWebSocket() {
     if (!socket.value || socket.value.readyState !== WebSocket.OPEN) return
     const readEvent: WebSocketEvent = {
       type: 'message:read',
-      data: {
-        roomId,
-        userId: currentUserId
-      }
+      data: { roomId, userId: currentUserId }
     }
     socket.value.send(JSON.stringify(readEvent))
   }
@@ -437,17 +347,13 @@ export function useWebSocket() {
   const startPrivateChat = (targetUserId: string) => {
     const privateEvent: WebSocketEvent = {
       type: 'room:private:start',
-      data: {
-        targetUserId: targetUserId
-      }
+      data: { targetUserId }
     }
     socket.value?.send(JSON.stringify(privateEvent))
   }
 
   const syncRooms = () => {
-    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
-      return
-    }
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) return
 
     const syncData = rooms.value.map(room => ({
       roomId: room.id,
@@ -456,9 +362,7 @@ export function useWebSocket() {
 
     const syncEvent: WebSocketEvent = {
       type: 'room:sync',
-      data: {
-        rooms: syncData
-      }
+      data: { rooms: syncData }
     }
     socket.value.send(JSON.stringify(syncEvent))
   }
@@ -471,42 +375,38 @@ export function useWebSocket() {
     }
     const historyEvent: WebSocketEvent = {
       type: 'message:history',
-      data: {
-        roomId: roomId
-      }
+      data: { roomId }
     }
     socket.value.send(JSON.stringify(historyEvent))
   }
 
   const disconnect = () => {
+    currentUser = null
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+    reconnectAttempts.value = MAX_RECONNECT_ATTEMPTS
     socket.value?.close()
   }
 
   const setCurrentRoom = (roomId: string) => {
-    currentRoomId.value = roomId
-    // 清除该房间的未读数
-    if (unreadCounts.value[roomId]) {
-      delete unreadCounts.value[roomId]
-    }
-    // 发送已读回执
+    store.setCurrentRoom(roomId)
     sendReadReceipt(roomId)
   }
 
-  const getUnreadCount = (roomId: string): number => {
-    return unreadCounts.value[roomId] || 0
-  }
-
-  const getTotalUnreadCount = (): number => {
-    return Object.values(unreadCounts.value).reduce((sum, count) => sum + count, 0)
-  }
-
   onUnmounted(() => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
     disconnect()
   })
 
   return {
     socket,
     isConnected,
+    reconnectAttempts,
     messages,
     rooms,
     onlineUsers,
@@ -527,8 +427,8 @@ export function useWebSocket() {
     startPrivateChat,
     disconnect,
     setCurrentRoom,
-    getUnreadCount,
-    getTotalUnreadCount,
+    getUnreadCount: store.getUnreadCount,
+    getTotalUnreadCount: () => store.getTotalUnreadCount,
     loadMessageHistory,
     syncRooms
   }

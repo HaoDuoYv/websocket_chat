@@ -9,12 +9,25 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Set;
+
 @RestController
 @RequestMapping("/api/file")
 @CrossOrigin(origins = "*")
 public class FileController {
 
     private static final Logger logger = LoggerFactory.getLogger(FileController.class);
+
+    private static final Set<String> BLOCKED_EXTENSIONS = Set.of(
+            "exe", "bat", "cmd", "com", "msi", "scr", "pif",
+            "sh", "bash", "csh", "ksh",
+            "ps1", "psm1", "psd1",
+            "vbs", "vbe", "wsf", "wsh",
+            "jar", "war", "ear",
+            "dll", "so", "dylib",
+            "sys", "drv",
+            "php", "asp", "aspx", "jsp", "jspx", "cgi", "pl"
+    );
 
     @Autowired
     private FileUploadService fileUploadService;
@@ -47,6 +60,14 @@ public class FileController {
         if (file.getSize() > maxSize) {
             return ResponseEntity.badRequest()
                     .body(new FileUploadResponse(false, "文件大小不能超过500MB", null, null, 0, null));
+        }
+
+        // 检查危险文件类型
+        String extension = getFileExtension(originalFilename);
+        if (BLOCKED_EXTENSIONS.contains(extension.toLowerCase())) {
+            logger.warn("拒绝上传危险文件类型: {} (文件名: {})", extension, originalFilename);
+            return ResponseEntity.badRequest()
+                    .body(new FileUploadResponse(false, "不支持上传该类型的文件", null, null, 0, null));
         }
 
         try {
@@ -146,5 +167,16 @@ public class FileController {
         }
 
         return request.getServerPort();
+    }
+
+    private String getFileExtension(String filename) {
+        if (filename == null) {
+            return "";
+        }
+        int lastDotIndex = filename.lastIndexOf('.');
+        if (lastDotIndex < 0 || lastDotIndex == filename.length() - 1) {
+            return "";
+        }
+        return filename.substring(lastDotIndex + 1);
     }
 }

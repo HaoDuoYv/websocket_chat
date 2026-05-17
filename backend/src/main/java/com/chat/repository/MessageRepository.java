@@ -29,4 +29,9 @@ public interface MessageRepository extends JpaRepository<Message, String> {
     Optional<Long> findMaxSeqByRoomId(@Param("roomId") Long roomId);
 
     List<Message> findByRoomIdOrderBySeqAsc(Long roomId);
+
+    @Query("SELECT m FROM Message m WHERE m.id IN " +
+           "(SELECT m2.id FROM Message m2 WHERE m2.roomId IN :roomIds " +
+           "GROUP BY m2.roomId HAVING m2.seq = MAX(m2.seq))")
+    List<Message> findLatestMessagesByRoomIds(@Param("roomIds") List<Long> roomIds);
 }

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useWebSocket } from '@/composables/useWebSocket'
-import FileMessage from '@/components/FileMessage.vue'
-import FileUploadButton from '@/components/FileUploadButton.vue'
-import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
-import { emojiCategories } from '@/config/emojis'
+import MessageList from '@/components/MessageList.vue'
+import MessageInput from '@/components/MessageInput.vue'
+import ChatSidebar from '@/components/ChatSidebar.vue'
+import FilePreviewModal from '@/components/FilePreviewModal.vue'
+import { uploadFile } from '@/api/file'
 
 const PROJECT_NOTICE_STORAGE_KEY = 'project-notice-dismissed'
 const projectNotice = {
@@ -16,12 +17,7 @@ const projectNotice = {
     '前端使用 Vue 3 + TypeScript，后端基于 Spring Boot 与 WebSocket。',
     '更适合用于学习、演示和局域网环境体验，不建议直接作为生产方案使用。'
   ],
-  links: [
-    {
-      label: 'GitHub 项目地址',
-      href: 'https://github.com/HaoDuoYv/websocket_chat'
-    }
-  ]
+  links: [{ label: 'GitHub 项目地址', href: 'https://github.com/HaoDuoYv/websocket_chat' }]
 }
 
 interface PendingAttachment {
@@ -36,14 +32,10 @@ const router = useRouter()
 const currentRoomId = ref(route.params.chatId as string)
 const roomId = computed(() => currentRoomId.value)
 const user = ref<any>(null)
-const newMessage = ref('')
-const messagesContainer = ref<HTMLElement | null>(null)
+const messagesContainer = ref<InstanceType<typeof MessageList> | null>(null)
+const messageInputRef = ref<InstanceType<typeof MessageInput> | null>(null)
 const uploadError = ref('')
-const showEmojiPicker = ref(false)
 const isDraggingFile = ref(false)
-const fileUploadButtonRef = ref<{ queueFiles: (files: File[] | FileList) => Promise<void> } | null>(null)
-const pendingAttachments = ref<PendingAttachment[]>([])
-const previewingAttachment = ref<PendingAttachment | null>(null)
 const isSendingFiles = ref(false)
 const uploadProgress = ref(0)
 const uploadingFileName = ref('')
@@ -53,172 +45,45 @@ const { connect, sendMessage, sendFileMessage, messages, onlineUsers, setCurrent
 
 const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 const isProjectNoticeOpen = ref(false)
-const hasShownProjectNotice = ref(false)
+const previewingFile = ref<{ fileName: string; fileSize: number; fileUrl: string; fileType: string } | null>(null)
 
 const toggleTheme = () => {
   isDarkTheme.value = !isDarkTheme.value
   localStorage.setItem('theme', isDarkTheme.value ? 'dark' : 'light')
 }
 
-const roomMessages = computed(() => {
-  return messages.value
+const roomMessages = computed(() =>
+  messages.value
     .filter(msg => String(msg.roomId) === currentRoomId.value)
     .sort((a, b) => a.seq - b.seq)
-})
+)
 
 const currentRoom = computed(() => rooms.value.find(r => r.id === roomId.value))
 const roomTitle = computed(() => currentRoom.value?.name || '聊天')
 const onlineMemberCount = computed(() => onlineUsers.value.length)
-const canSend = computed(() => {
-  return !!user.value && !!roomId.value && !isSendingFiles.value && (
-    pendingAttachments.value.length > 0 || !!newMessage.value.trim()
-  )
-})
-
-const getAvatarColor = (userId: string) => {
-  const colors = ['#18181B', '#3F3F46', '#52525B', '#71717A', '#A1A1AA', '#27272A', '#525252', '#737373']
-  let hash = 0
-  for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return colors[Math.abs(hash) % colors.length]
-}
-
-const getAvatarText = (name: string) => {
-  return name ? name.charAt(0).toUpperCase() : '?'
-}
-
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
-}
 
 const showUploadError = (error: string) => {
   uploadError.value = error
-  window.setTimeout(() => {
-    if (uploadError.value === error) {
-      uploadError.value = ''
-    }
-  }, 3000)
-}
-
-const revokeAttachment = (attachment: PendingAttachment) => {
-  if (attachment.previewUrl) {
-    URL.revokeObjectURL(attachment.previewUrl)
-  }
-}
-
-const clearPendingAttachments = () => {
-  pendingAttachments.value.forEach(revokeAttachment)
-  pendingAttachments.value = []
-  previewingAttachment.value = null
-}
-
-const buildAttachmentId = (file: File) => `${file.name}-${file.size}-${file.lastModified}`
-
-const queuePendingFiles = (files: File[]) => {
-  const knownIds = new Set(pendingAttachments.value.map(attachment => attachment.id))
-
-  for (const file of files) {
-    const id = buildAttachmentId(file)
-    if (knownIds.has(id)) continue
-
-    pendingAttachments.value.push({
-      id,
-      file,
-      previewUrl: isImageFile(file.type) ? URL.createObjectURL(file) : '',
-      isImage: isImageFile(file.type)
-    })
-    knownIds.add(id)
-  }
-}
-
-const removePendingAttachment = (attachmentId: string) => {
-  const index = pendingAttachments.value.findIndex(attachment => attachment.id === attachmentId)
-  if (index === -1) return
-
-  const [attachment] = pendingAttachments.value.splice(index, 1)
-  if (previewingAttachment.value?.id === attachment.id) {
-    previewingAttachment.value = null
-  }
-  revokeAttachment(attachment)
-}
-
-const openAttachmentPreview = (attachment: PendingAttachment) => {
-  if (!attachment.isImage) return
-  previewingAttachment.value = attachment
-}
-
-const closeAttachmentPreview = () => {
-  previewingAttachment.value = null
-}
-
-const handleAttachmentPreviewKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && previewingAttachment.value) {
-    closeAttachmentPreview()
-  }
-}
-
-watch(previewingAttachment, attachment => {
-  if (typeof document === 'undefined') return
-
-  if (attachment) {
-    document.body.style.overflow = 'hidden'
-    return
-  }
-
-  document.body.style.overflow = ''
-})
-
-watch(roomMessages, () => {
-  scrollToBottom()
-}, { deep: true })
-
-const showProjectNotice = () => {
-  hasShownProjectNotice.value = true
-  isProjectNoticeOpen.value = true
-}
-
-const closeProjectNotice = () => {
-  isProjectNoticeOpen.value = false
-}
-
-const dismissProjectNotice = () => {
-  localStorage.setItem(PROJECT_NOTICE_STORAGE_KEY, 'true')
-  closeProjectNotice()
+  window.setTimeout(() => { if (uploadError.value === error) uploadError.value = '' }, 3000)
 }
 
 const initChat = () => {
   const userData = localStorage.getItem('user')
-  if (!userData) {
-    router.push('/login')
-    return
-  }
-
+  if (!userData) { router.push('/login'); return }
   user.value = JSON.parse(userData)
   connect(user.value)
-  scrollToBottom()
+  messagesContainer.value?.scrollToBottom()
 }
 
 onMounted(() => {
   initChat()
   setCurrentRoom(currentRoomId.value)
   loadMessageHistory(currentRoomId.value)
-  window.addEventListener('keydown', handleAttachmentPreviewKeydown)
-})
-
-onUnmounted(() => {
-  clearPendingAttachments()
-  document.body.style.overflow = ''
-  window.removeEventListener('keydown', handleAttachmentPreviewKeydown)
 })
 
 onBeforeRouteUpdate((to, from, next) => {
   if (to.params.chatId !== from.params.chatId) {
-    clearPendingAttachments()
+    messageInputRef.value?.clearPendingAttachments()
     currentRoomId.value = to.params.chatId as string
     setCurrentRoom(currentRoomId.value)
     loadMessageHistory(currentRoomId.value)
@@ -226,36 +91,27 @@ onBeforeRouteUpdate((to, from, next) => {
   next()
 })
 
-const sendPendingAttachments = async () => {
-  if (!user.value || !roomId.value || pendingAttachments.value.length === 0) return
+const handleSendText = (content: string) => {
+  if (!user.value || !roomId.value) return
+  sendMessage(roomId.value, content, user.value.userId)
+}
 
-  const queuedAttachments = [...pendingAttachments.value]
+const handleSendFiles = async (attachments: PendingAttachment[]) => {
+  if (!user.value || !roomId.value) return
   const failedIds = new Set<string>()
-
   isSendingFiles.value = true
   uploadProgress.value = 0
-
   try {
-    for (const attachment of queuedAttachments) {
+    for (const attachment of attachments) {
       uploadingFileName.value = attachment.file.name
       uploadProgress.value = 0
-
       try {
-        const response = await uploadFile(
-          attachment.file,
-          roomId.value,
-          user.value.userId,
-          progress => {
-            uploadProgress.value = progress
-          }
-        )
-
+        const response = await uploadFile(attachment.file, roomId.value, user.value.userId, p => { uploadProgress.value = p })
         if (!response.success) {
           failedIds.add(attachment.id)
           showUploadError(response.message || `文件 ${attachment.file.name} 上传失败`)
           continue
         }
-
         sendFileMessage(roomId.value, user.value.userId, {
           fileId: response.fileId,
           fileName: response.fileName,
@@ -269,106 +125,17 @@ const sendPendingAttachments = async () => {
       }
     }
   } finally {
-    const attachmentsToKeep: PendingAttachment[] = []
-    for (const attachment of pendingAttachments.value) {
-      if (failedIds.has(attachment.id)) {
-        attachmentsToKeep.push(attachment)
-      } else {
-        revokeAttachment(attachment)
-      }
-    }
-
-    pendingAttachments.value = attachmentsToKeep
-    if (previewingAttachment.value && !failedIds.has(previewingAttachment.value.id)) {
-      previewingAttachment.value = null
-    }
-
+    messageInputRef.value?.removeSentAttachments(new Set(attachments.filter(a => !failedIds.has(a.id)).map(a => a.id)))
     isSendingFiles.value = false
     uploadProgress.value = 0
     uploadingFileName.value = ''
   }
 }
 
-const handleSendMessage = async () => {
-  if (!canSend.value || !user.value) return
-
-  const content = newMessage.value.trim()
-  if (content) {
-    sendMessage(roomId.value, content, user.value.userId)
-    newMessage.value = ''
-  }
-
-  showEmojiPicker.value = false
-
-  if (pendingAttachments.value.length > 0) {
-    await sendPendingAttachments()
-  }
-}
-
-const handleBack = () => {
-  router.push('/login')
-}
-
-const formatTime = (timestamp: number) => {
-  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-const formatDate = (timestamp: number) => {
-  const date = new Date(timestamp)
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-
-  if (date.toDateString() === today.toDateString()) {
-    return '今天'
-  }
-  if (date.toDateString() === yesterday.toDateString()) {
-    return '昨天'
-  }
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
-}
-
-const shouldShowDate = (index: number) => {
-  if (index === 0) return true
-  const current = roomMessages.value[index]
-  const prev = roomMessages.value[index - 1]
-  return new Date(current.timestamp).toDateString() !== new Date(prev.timestamp).toDateString()
-}
-
-const shouldShowTime = (index: number) => {
-  if (index === 0) return true
-  const current = roomMessages.value[index]
-  const prev = roomMessages.value[index - 1]
-  return current.timestamp - prev.timestamp > 5 * 60 * 1000
-}
-
-const activeEmojiCategory = ref('frequent')
-
-const insertEmoji = (emoji: string) => {
-  newMessage.value += emoji
-}
-
-const uploadFiles = async (files: File[] | FileList) => {
-  if (!user.value || !roomId.value) return
-  await fileUploadButtonRef.value?.queueFiles(files)
-}
-
-const hasDraggedFiles = (event: DragEvent) => {
-  const types = event.dataTransfer?.types
-  return types ? Array.from(types).includes('Files') : false
-}
-
-const handlePasteUpload = async (event: ClipboardEvent) => {
-  const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'))
-  if (files.length === 0) return
-
-  event.preventDefault()
-  await uploadFiles(files)
-}
+const hasDraggedFiles = (event: DragEvent) => event.dataTransfer?.types ? Array.from(event.dataTransfer.types).includes('Files') : false
 
 const handleDragEnter = (event: DragEvent) => {
   if (!hasDraggedFiles(event)) return
-
   event.preventDefault()
   dragDepth += 1
   isDraggingFile.value = true
@@ -376,39 +143,34 @@ const handleDragEnter = (event: DragEvent) => {
 
 const handleDragOver = (event: DragEvent) => {
   if (!hasDraggedFiles(event)) return
-
   event.preventDefault()
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'copy'
-  }
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   isDraggingFile.value = true
 }
 
 const handleDragLeave = (event: DragEvent) => {
   if (!hasDraggedFiles(event)) return
-
   event.preventDefault()
   dragDepth = Math.max(0, dragDepth - 1)
-  if (dragDepth === 0) {
-    isDraggingFile.value = false
-  }
+  if (dragDepth === 0) isDraggingFile.value = false
 }
 
 const handleDropUpload = async (event: DragEvent) => {
   if (!hasDraggedFiles(event)) return
-
   event.preventDefault()
   dragDepth = 0
   isDraggingFile.value = false
-
   const files = event.dataTransfer?.files
-  if (files && files.length > 0) {
-    await uploadFiles(files)
-  }
+  if (files && files.length > 0) await messageInputRef.value?.uploadFiles(files)
 }
 
-const isImageMessage = (message: { type?: string; fileType?: string }) => {
-  return message.type === 'file' && isImageFile(message.fileType || '')
+const dismissProjectNotice = () => {
+  localStorage.setItem(PROJECT_NOTICE_STORAGE_KEY, 'true')
+  isProjectNoticeOpen.value = false
+}
+
+const openFilePreview = (file: { fileName: string; fileSize: number; fileUrl: string; fileType: string }) => {
+  previewingFile.value = file
 }
 </script>
 
@@ -424,7 +186,7 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
       <header class="px-6 py-4 border-b flex items-center justify-between" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
         <div class="flex items-center gap-4">
           <button
-            @click="handleBack"
+            @click="router.push('/login')"
             class="w-9 h-9 flex items-center justify-center transition-colors"
             :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'"
           >
@@ -432,13 +194,9 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
           </button>
-
           <div class="flex items-center gap-3">
-            <div
-              class="w-10 h-10 flex items-center justify-center text-white text-sm font-medium"
-              :style="{ backgroundColor: getAvatarColor(roomId) }"
-            >
-              {{ getAvatarText(roomTitle) }}
+            <div class="w-10 h-10 flex items-center justify-center text-white text-sm font-medium bg-[#18181B]">
+              {{ roomTitle.charAt(0).toUpperCase() }}
             </div>
             <div>
               <h1 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ roomTitle }}</h1>
@@ -449,21 +207,17 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             </div>
           </div>
         </div>
-
         <div class="flex items-center gap-2">
           <button
-            @click="showProjectNotice"
+            @click="isProjectNoticeOpen = true"
             class="w-9 h-9 flex items-center justify-center transition-colors"
             :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-[#18181B] hover:text-[#27272A]'"
             title="关于本项目"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 16v-4"/>
-              <path d="M12 8h.01"/>
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
             </svg>
           </button>
-
           <button
             @click="toggleTheme"
             class="w-9 h-9 flex items-center justify-center transition-colors"
@@ -471,231 +225,37 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
             :title="isDarkTheme ? '切换到浅色模式' : '切换到深色模式'"
           >
             <svg v-if="isDarkTheme" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="5"/>
-              <line x1="12" y1="1" x2="12" y2="3"/>
-              <line x1="12" y1="21" x2="12" y2="23"/>
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-              <line x1="1" y1="12" x2="3" y2="12"/>
-              <line x1="21" y1="12" x2="23" y2="12"/>
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
             </svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           </button>
-
-          <button class="w-9 h-9 flex items-center justify-center transition-colors" :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="1"/>
-              <circle cx="19" cy="12" r="1"/>
-              <circle cx="5" cy="12" r="1"/>
-            </svg>
-          </button>
         </div>
       </header>
 
-      <div ref="messagesContainer" class="flex-1 overflow-y-auto px-6 py-6">
-        <div v-if="roomMessages.length === 0" class="flex flex-col items-center justify-center h-full" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">
-          <div class="w-14 h-14 bg-[#18181B] flex items-center justify-center mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-          </div>
-          <p class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-400'">还没有消息</p>
-          <p class="text-xs mt-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">发送第一条消息开始聊天吧</p>
-        </div>
-
-        <template v-else>
-          <template v-for="(message, index) in roomMessages" :key="message.id">
-            <div v-if="shouldShowDate(index)" class="flex justify-center my-6">
-              <span class="text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">{{ formatDate(message.timestamp) }}</span>
-            </div>
-
-            <div v-else-if="shouldShowTime(index)" class="flex justify-center my-3">
-              <span class="text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">{{ formatTime(message.timestamp) }}</span>
-            </div>
-
-            <div
-              :class="[
-                'flex gap-3 mb-4 bubble-pop',
-                String(message.senderId) === user?.userId ? 'flex-row-reverse' : 'flex-row'
-              ]"
-            >
-              <div
-                class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
-                :style="{ backgroundColor: getAvatarColor(String(message.senderId)) }"
-              >
-                {{ getAvatarText(message.senderName) }}
-              </div>
-
-              <div :class="['flex flex-col max-w-[65%]', String(message.senderId) === user?.userId ? 'items-end' : 'items-start']">
-                <div v-if="String(message.senderId) !== user?.userId" class="text-xs mb-1 ml-1" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">
-                  {{ message.senderName }}
-                </div>
-
-                <div
-                  :class="[
-                    'transition-all duration-200',
-                    isImageMessage(message) ? 'px-1 py-1 rounded-2xl' : 'px-4 py-3 text-sm rounded-2xl',
-                    String(message.senderId) === user?.userId
-                      ? 'bg-[#18181B] text-white shadow-md rounded-br-md'
-                      : (isDarkTheme ? 'bg-gray-800 text-gray-100 shadow-sm rounded-bl-md' : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md')
-                  ]"
-                >
-                  <div v-if="message.type === 'file' && message.fileId" class="min-w-[200px]">
-                    <FileMessage
-                      :file-name="message.fileName || '未命名文件'"
-                      :file-size="message.fileSize || 0"
-                      :file-url="message.fileUrl || ''"
-                      :file-type="message.fileType || ''"
-                      :is-dark="isDarkTheme"
-                    />
-                  </div>
-
-                  <div v-else class="leading-relaxed">{{ message.content }}</div>
-                </div>
-
-                <div class="flex items-center gap-1 mt-1 text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
-                  <span>{{ formatTime(message.timestamp) }}</span>
-                  <span v-if="String(message.senderId) === user?.userId" class="flex items-center">
-                    <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </template>
-        </template>
-      </div>
+      <MessageList
+        ref="messagesContainer"
+        :messages="roomMessages"
+        :current-user-id="user?.userId || ''"
+        :is-dark="isDarkTheme"
+        @file-preview="openFilePreview"
+      />
 
       <div v-if="uploadError" class="px-6 py-2" :class="isDarkTheme ? 'bg-red-900/20' : 'bg-red-50'">
         <p class="text-xs text-red-500">{{ uploadError }}</p>
       </div>
 
-      <div class="px-6 py-4 border-t" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
-        <div v-if="showEmojiPicker" class="mb-3">
-            <div class="flex gap-1 mb-2 overflow-x-auto pb-1">
-              <button
-                v-for="cat in emojiCategories"
-                :key="cat.key"
-                @click="activeEmojiCategory = cat.key"
-                class="shrink-0 px-2 py-1 text-xs rounded-md transition-colors"
-                :class="activeEmojiCategory === cat.key
-                  ? (isDarkTheme ? 'bg-white/10 text-white' : 'bg-gray-200 text-gray-800')
-                  : (isDarkTheme ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')"
-              >
-                {{ cat.icon }} {{ cat.label }}
-              </button>
-            </div>
-            <div class="grid grid-cols-8 gap-0.5 max-h-48 overflow-y-auto">
-              <button
-                v-for="(emoji, idx) in emojiCategories.find(c => c.key === activeEmojiCategory)?.emojis"
-                :key="idx"
-                @click="insertEmoji(emoji)"
-                class="w-8 h-8 text-lg flex items-center justify-center rounded transition-colors"
-                :class="isDarkTheme ? 'hover:bg-gray-800' : 'hover:bg-gray-100'"
-              >
-                {{ emoji }}
-              </button>
-            </div>
-          </div>
+      <MessageInput
+        ref="messageInputRef"
+        :is-dark="isDarkTheme"
+        :disabled="isSendingFiles"
+        @send="handleSendText"
+        @send-files="handleSendFiles"
+        @error="showUploadError"
+      />
 
-        <div v-if="pendingAttachments.length > 0" class="mb-3 flex gap-3 overflow-x-auto pb-1">
-          <div
-            v-for="attachment in pendingAttachments"
-            :key="attachment.id"
-            class="group relative shrink-0 overflow-hidden rounded-2xl border"
-            :class="isDarkTheme ? 'border-gray-700 bg-gray-800/80' : 'border-gray-200 bg-gray-50'"
-          >
-            <button
-              v-if="attachment.isImage"
-              type="button"
-              class="block h-24 w-24 cursor-zoom-in overflow-hidden transition-transform duration-200 hover:scale-[1.02]"
-              @click="openAttachmentPreview(attachment)"
-            >
-              <img :src="attachment.previewUrl" :alt="attachment.file.name" class="h-full w-full object-cover" />
-            </button>
-            <div v-else class="flex h-24 w-56 items-center gap-3 px-4">
-              <div class="text-3xl">{{ getFileIcon(attachment.file.name) }}</div>
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-medium" :class="isDarkTheme ? 'text-gray-100' : 'text-gray-800'">{{ attachment.file.name }}</p>
-                <p class="mt-1 text-xs" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">{{ formatFileSize(attachment.file.size) }}</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white opacity-0 transition group-hover:opacity-100"
-              @click="removePendingAttachment(attachment.id)"
-            >
-              ×
-            </button>
-
-            <div v-if="attachment.isImage" class="absolute inset-x-0 bottom-0 bg-black/50 px-2 py-1 text-white">
-              <p class="truncate text-xs">{{ attachment.file.name }}</p>
-              <p class="text-[11px] opacity-80">{{ formatFileSize(attachment.file.size) }} · 点击预览</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button
-            @click="showEmojiPicker = !showEmojiPicker"
-            class="w-8 h-8 flex items-center justify-center transition-colors"
-            :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-              <line x1="9" y1="9" x2="9.01" y2="9"/>
-              <line x1="15" y1="9" x2="15.01" y2="9"/>
-            </svg>
-          </button>
-
-          <FileUploadButton
-            ref="fileUploadButtonRef"
-            :is-dark="isDarkTheme"
-            :disabled="isSendingFiles"
-            @files-selected="queuePendingFiles"
-            @upload-error="showUploadError"
-          />
-
-          <div class="flex-1 relative">
-            <input
-              v-model="newMessage"
-              @paste="handlePasteUpload"
-              @keyup.enter="handleSendMessage"
-              type="text"
-              placeholder="输入消息"
-              class="w-full px-3 py-2.5 bg-transparent border border-[#E5E5E5] rounded-xl text-sm focus:outline-none focus:border-[#18181B] focus:ring-2 focus:ring-[#18181B]/10 transition-all duration-200 input-glow"
-              :class="isDarkTheme ? 'border-gray-700 text-gray-200 placeholder-gray-500 bg-gray-800/50' : 'border-gray-200 text-gray-700 placeholder-gray-400'"
-            />
-          </div>
-
-          <button
-            @click="handleSendMessage"
-            :disabled="!canSend"
-            class="w-10 h-10 bg-[#18181B] hover:bg-[#27272A] text-white flex items-center justify-center transition-all duration-200 rounded-xl btn-press disabled:opacity-40"
-            :class="isDarkTheme ? 'disabled:bg-gray-800' : 'disabled:bg-gray-200'"
-          >
-            <svg v-if="!isSendingFiles" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-            <svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div
-        v-if="isSendingFiles"
-        class="absolute inset-0 z-40 flex items-center justify-center bg-black/25 backdrop-blur-sm"
-      >
+      <div v-if="isSendingFiles" class="absolute inset-0 z-40 flex items-center justify-center bg-black/25 backdrop-blur-sm">
         <div class="w-80 rounded-2xl border px-5 py-4" :class="isDarkTheme ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-800'">
           <div class="flex items-center justify-between gap-3">
             <div>
@@ -710,57 +270,19 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
         </div>
       </div>
 
-      <div
-        v-if="isDraggingFile"
-        class="absolute inset-0 z-40 flex items-center justify-center bg-[#18181B]/10 backdrop-blur-sm"
-      >
-        <div
-          class="rounded-2xl border-2 border-dashed px-8 py-10 text-center"
-          :class="isDarkTheme ? 'border-[#525252] bg-gray-900/80 text-gray-100' : 'border-[#18181B] bg-white/95 text-gray-700'"
-        >
+      <div v-if="isDraggingFile" class="absolute inset-0 z-40 flex items-center justify-center bg-[#18181B]/10 backdrop-blur-sm">
+        <div class="rounded-2xl border-2 border-dashed px-8 py-10 text-center" :class="isDarkTheme ? 'border-[#525252] bg-gray-900/80 text-gray-100' : 'border-[#18181B] bg-white/95 text-gray-700'">
           <p class="text-base font-medium">松开发送图片或文件</p>
           <p class="mt-2 text-sm opacity-70">文件会先进入输入框，点击发送后再上传</p>
         </div>
       </div>
     </div>
 
-    <aside class="w-60 border-l hidden lg:flex flex-col" :class="isDarkTheme ? 'border-gray-800 bg-[#27272A]' : 'border-gray-100 bg-white'">
-      <div class="px-5 py-4 border-b" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
-        <h3 class="text-sm font-medium" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">在线成员</h3>
-        <p class="text-xs mt-1" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">{{ onlineUsers.length }} 人在线</p>
-      </div>
-
-      <div class="flex-1 overflow-y-auto py-2">
-        <div
-          v-for="onlineUser in onlineUsers"
-          :key="onlineUser.userId"
-          class="flex items-center gap-3 px-5 py-2.5 transition-colors"
-          :class="isDarkTheme ? 'hover:bg-gray-800' : 'hover:bg-gray-50'"
-        >
-          <div class="relative">
-            <div
-              class="w-8 h-8 flex items-center justify-center text-white text-xs font-medium"
-              :style="{ backgroundColor: getAvatarColor(onlineUser.userId) }"
-            >
-              {{ getAvatarText(onlineUser.username) }}
-            </div>
-            <div class="absolute bottom-0 right-0 w-2 h-2 bg-[#737373] border-2 rounded-full" :class="isDarkTheme ? 'border-gray-800' : 'border-white'"></div>
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm truncate" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ onlineUser.username }}</p>
-            <p class="text-xs text-[#737373]">在线</p>
-          </div>
-        </div>
-      </div>
-    </aside>
+    <ChatSidebar :users="onlineUsers" :is-dark="isDarkTheme" />
   </div>
 
   <Teleport to="body">
-    <div
-      v-if="isProjectNoticeOpen"
-      class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
-      @click.self="closeProjectNotice"
-    >
+    <div v-if="isProjectNoticeOpen" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" @click.self="isProjectNoticeOpen = false">
       <div class="w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl" :class="isDarkTheme ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-800'">
         <div class="border-b px-6 py-5" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
           <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#18181B]">关于本项目</p>
@@ -769,90 +291,32 @@ const isImageMessage = (message: { type?: string; fileType?: string }) => {
         </div>
         <div class="px-6 py-5">
           <div class="space-y-3">
-            <div
-              v-for="(item, index) in projectNotice.highlights"
-              :key="item"
-              class="flex items-start gap-3 rounded-2xl px-4 py-3"
-              :class="isDarkTheme ? 'bg-gray-800/70' : 'bg-gray-50'"
-            >
+            <div v-for="(item, index) in projectNotice.highlights" :key="item" class="flex items-start gap-3 rounded-2xl px-4 py-3" :class="isDarkTheme ? 'bg-gray-800/70' : 'bg-gray-50'">
               <span class="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#18181B] text-xs font-semibold text-white">{{ index + 1 }}</span>
               <p class="text-sm leading-6">{{ item }}</p>
             </div>
           </div>
-
           <div class="mt-5 rounded-2xl border px-4 py-4" :class="isDarkTheme ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-white'">
             <p class="text-sm font-medium">相关链接</p>
             <div class="mt-3 flex flex-col gap-2">
-              <a
-                v-for="link in projectNotice.links"
-                :key="link.href"
-                :href="link.href"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center gap-2 text-sm text-[#525252] hover:text-[#18181B] hover:underline break-all"
-              >
+              <a v-for="link in projectNotice.links" :key="link.href" :href="link.href" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 text-sm text-[#525252] hover:text-[#18181B] hover:underline break-all">
                 <span>{{ link.label }}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M7 17 17 7"/>
-                  <path d="M7 7h10v10"/>
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
               </a>
             </div>
           </div>
         </div>
         <div class="flex items-center justify-end gap-3 border-t px-6 py-4" :class="isDarkTheme ? 'border-gray-800 bg-gray-950/40' : 'border-gray-100 bg-gray-50'">
-          <button
-            type="button"
-            class="rounded-xl px-4 py-2 text-sm transition-colors"
-            :class="isDarkTheme ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-white'"
-            @click="closeProjectNotice"
-          >
-            关闭
-          </button>
-          <button
-            type="button"
-            class="rounded-xl bg-[#18181B] px-4 py-2 text-sm text-white transition-colors hover:bg-[#27272A]"
-            @click="dismissProjectNotice"
-          >
-            今日不再提示
-          </button>
+          <button type="button" class="rounded-xl px-4 py-2 text-sm transition-colors" :class="isDarkTheme ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-white'" @click="isProjectNoticeOpen = false">关闭</button>
+          <button type="button" class="rounded-xl bg-[#18181B] px-4 py-2 text-sm text-white transition-colors hover:bg-[#27272A]" @click="dismissProjectNotice">今日不再提示</button>
         </div>
       </div>
     </div>
   </Teleport>
 
-  <Teleport to="body">
-    <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="previewingAttachment"
-        class="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
-        @click.self="closeAttachmentPreview"
-      >
-        <div class="absolute inset-x-0 top-0 flex items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-4 py-4 text-white">
-          <p class="min-w-0 truncate text-sm font-medium" :title="previewingAttachment.file.name">
-            {{ previewingAttachment.file.name }}
-          </p>
-          <button
-            type="button"
-            class="shrink-0 rounded px-3 py-2 text-sm transition-colors hover:bg-white/10"
-            @click="closeAttachmentPreview"
-          >
-            关闭
-          </button>
-        </div>
-        <img
-          :src="previewingAttachment.previewUrl"
-          :alt="previewingAttachment.file.name"
-          class="max-h-full max-w-full rounded object-contain transition duration-200 ease-out"
-        />
-      </div>
-    </Transition>
-  </Teleport>
+  <FilePreviewModal
+    :file="previewingFile"
+    :is-dark="isDarkTheme"
+    @close="previewingFile = null"
+  />
 </template>

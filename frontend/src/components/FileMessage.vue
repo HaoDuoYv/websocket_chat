@@ -14,8 +14,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   preview: [{ fileName: string; fileSize: number; fileUrl: string; fileType: string }]
 }>()
-const imageMessage = computed(() => isImageFile(props.fileType))
-const videoMessage = computed(() => isVideoFile(props.fileType))
+const imageMessage = computed(() => isImageFile(props.fileType, props.fileName))
+const videoMessage = computed(() => isVideoFile(props.fileType, props.fileName))
 
 // 图片加载状态
 const imageLoaded = ref(false)
@@ -220,7 +220,7 @@ const handlePreview = () => {
           {{ fileName }}
         </p>
         <p class="mt-1 text-xs" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
-          {{ formatFileSize(fileSize) }} · {{ getFileTypeDescription(fileType) }}
+          {{ formatFileSize(fileSize) }} · {{ getFileTypeDescription(fileType, fileName) }}
         </p>
 
         <div class="mt-2.5 flex gap-2">

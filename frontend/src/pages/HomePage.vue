@@ -9,7 +9,8 @@ import FileUploadButton from '@/components/FileUploadButton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetRemarkDialog from '@/components/SetRemarkDialog.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
-import { formatFileSize, getFileIcon, getFileTypeDescription, isImageFile, isPdfFile, isTextFile, isCodeFile, isVideoFile, uploadFile } from '@/api/file'
+import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
+import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import { getUserRemarks, saveUserRemark } from '@/api/userRemark'
 import { emojiCategories } from '@/config/emojis'
 
@@ -82,7 +83,7 @@ const fileUploadButtonRef = ref<{ queueFiles: (files: File[] | FileList) => Prom
 const pendingAttachments = ref<PendingAttachment[]>([])
 const previewingAttachment = ref<PendingAttachment | null>(null)
 const previewingSentImage = ref<{ fileName: string; fileSize: number; fileUrl: string; fileType: string } | null>(null)
-const previewingDocument = ref<{ fileName: string; fileSize: number; fileUrl: string; fileType: string; content?: string } | null>(null)
+const previewingFile = ref<{ fileName: string; fileSize: number; fileUrl: string; fileType: string } | null>(null)
 const isSendingFiles = ref(false)
 const uploadProgress = ref(0)
 const uploadingFileName = ref('')
@@ -432,51 +433,17 @@ const openAttachmentPreview = (attachment: PendingAttachment) => {
 }
 
 const openSentImagePreview = async (data: { fileName: string; fileSize: number; fileUrl: string; fileType: string }) => {
-  if (isImageFile(data.fileType)) {
-    // 图片 → 图片预览模态框
+  if (isImageFile(data.fileType, data.fileName)) {
     previewingSentImage.value = data
   } else {
-    // 其他文件 → 文档预览模态框
-    openDocumentPreview(data)
+    previewingFile.value = data
   }
-}
-
-const openDocumentPreview = async (data: { fileName: string; fileSize: number; fileUrl: string; fileType: string }) => {
-  const doc: { fileName: string; fileSize: number; fileUrl: string; fileType: string; content?: string } = { ...data }
-
-  // 对于文本文件和代码文件，先获取内容
-  if (isTextFile(data.fileType) || isCodeFile(data.fileName)) {
-    try {
-      const response = await fetch(data.fileUrl)
-      doc.content = await response.text()
-    } catch {
-      doc.content = '无法加载文件内容'
-    }
-  }
-
-  previewingDocument.value = doc
-}
-
-const closeDocumentPreview = () => {
-  previewingDocument.value = null
-}
-
-const downloadDocument = () => {
-  if (!previewingDocument.value) return
-  const doc = previewingDocument.value
-  const link = document.createElement('a')
-  link.href = doc.fileUrl
-  link.download = doc.fileName
-  link.rel = 'noopener'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const closeAttachmentPreview = () => {
   previewingAttachment.value = null
   previewingSentImage.value = null
-  previewingDocument.value = null
+  previewingFile.value = null
 }
 
 const downloadPreviewedAttachment = () => {
@@ -493,12 +460,12 @@ const downloadPreviewedAttachment = () => {
 }
 
 const handleAttachmentPreviewKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && (previewingAttachment.value || previewingSentImage.value || previewingDocument.value)) {
+  if (event.key === 'Escape' && (previewingAttachment.value || previewingSentImage.value || previewingFile.value)) {
     closeAttachmentPreview()
   }
 }
 
-const anyPreviewOpen = computed(() => !!previewingAttachment.value || !!previewingSentImage.value || !!previewingDocument.value)
+const anyPreviewOpen = computed(() => !!previewingAttachment.value || !!previewingSentImage.value || !!previewingFile.value)
 watch(anyPreviewOpen, open => {
   if (typeof document === 'undefined') return
   document.body.style.overflow = open ? 'hidden' : ''
@@ -1123,8 +1090,8 @@ const handleDropUpload = async (event: DragEvent) => {
   }
 }
 
-const isImageMessage = (message: { type?: string; fileType?: string }) => {
-  return message.type === 'file' && isImageFile(message.fileType || '')
+const isImageMessage = (message: { type?: string; fileType?: string; fileName?: string }) => {
+  return message.type === 'file' && isImageFile(message.fileType || '', message.fileName)
 }
 
 const isRoomReadByOthers = (roomId: string): boolean => {
@@ -2154,141 +2121,11 @@ const isRoomReadByOthers = (roomId: string): boolean => {
         </div>
       </div>
     </Transition>
-
-    <!-- 文档预览模态框 -->
-    <Transition
-      enter-active-class="transition duration-300 ease-out"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition duration-200 ease-in"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="previewingDocument"
-        class="fixed inset-0 z-[70] flex flex-col"
-        :class="isDarkTheme ? 'bg-[#18181B]' : 'bg-white'"
-        @keydown.escape="closeDocumentPreview"
-      >
-        <!-- 预览头部 -->
-        <div class="flex items-center justify-between border-b px-6 py-4 shrink-0"
-          :class="isDarkTheme ? 'border-gray-700' : 'border-gray-200'"
-        >
-          <div class="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              class="shrink-0 rounded-full p-2 transition-colors"
-              :class="isDarkTheme ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-600'"
-              @click="closeDocumentPreview"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-            <div class="min-w-0">
-              <p class="text-sm font-medium truncate"
-                :class="isDarkTheme ? 'text-white' : 'text-gray-800'"
-                :title="previewingDocument.fileName"
-              >
-                {{ previewingDocument.fileName }}
-              </p>
-              <p class="text-xs mt-0.5"
-                :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'"
-              >
-                {{ formatFileSize(previewingDocument.fileSize) }} · {{ getFileTypeDescription(previewingDocument.fileType) }}
-              </p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              class="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors"
-              :class="isDarkTheme ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'"
-              @click="downloadDocument"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              下载
-            </button>
-          </div>
-        </div>
-
-        <!-- 预览内容 -->
-        <div class="flex-1 overflow-auto">
-          <!-- 视频文件预览 -->
-          <div v-if="isVideoFile(previewingDocument.fileType)" class="h-full flex items-center justify-center p-4">
-            <video
-              :src="previewingDocument.fileUrl"
-              class="max-w-full max-h-[80vh] rounded-lg shadow-lg"
-              controls
-              autoplay
-              muted
-              playsinline
-            >
-              您的浏览器不支持视频播放
-            </video>
-          </div>
-
-          <!-- PDF 预览 -->
-          <div v-else-if="isPdfFile(previewingDocument.fileType)" class="h-full">
-            <iframe
-              :src="`https://docs.google.com/viewer?url=${encodeURIComponent(previewingDocument.fileUrl)}&embedded=true`"
-              class="w-full h-full"
-              frameborder="0"
-            ></iframe>
-          </div>
-
-          <!-- 文本文件预览 -->
-          <div v-else-if="isTextFile(previewingDocument.fileType)" class="p-6">
-            <pre class="whitespace-pre-wrap text-sm font-mono leading-relaxed"
-              :class="isDarkTheme ? 'text-gray-300' : 'text-gray-800'"
-            >{{ previewingDocument.content || '加载中...' }}</pre>
-          </div>
-
-          <!-- 代码文件预览 -->
-          <div v-else-if="isCodeFile(previewingDocument.fileName)" class="p-6">
-            <pre class="whitespace-pre-wrap text-sm font-mono leading-relaxed rounded-lg p-5"
-              :class="isDarkTheme ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-800'"
-            >{{ previewingDocument.content || '加载中...' }}</pre>
-          </div>
-
-          <!-- 其他文件类型：不支持预览 -->
-          <div v-else class="flex flex-col items-center justify-center h-full p-6">
-            <div class="text-6xl mb-4">{{ getFileIcon(previewingDocument.fileName) }}</div>
-            <p class="text-lg font-medium mb-2"
-              :class="isDarkTheme ? 'text-white' : 'text-gray-800'"
-            >
-              {{ previewingDocument.fileName }}
-            </p>
-            <p class="text-sm mb-6"
-              :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'"
-            >
-              {{ formatFileSize(previewingDocument.fileSize) }}
-            </p>
-            <p class="text-sm mb-6"
-              :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'"
-            >
-              该文件类型暂不支持在线预览
-            </p>
-            <button
-              type="button"
-              class="flex items-center gap-2 rounded-lg px-6 py-3 bg-[#18181B] text-white font-medium transition-colors hover:bg-[#27272A]"
-              @click="downloadDocument"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              下载文件
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
   </Teleport>
+
+  <FilePreviewModal
+    :file="previewingFile"
+    :is-dark="isDarkTheme"
+    @close="previewingFile = null"
+  />
 </template>

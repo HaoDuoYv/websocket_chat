@@ -3,6 +3,7 @@ package com.chat.service;
 import com.chat.entity.Room;
 import com.chat.entity.RoomMember;
 import com.chat.entity.User;
+import com.chat.exception.BusinessException;
 import com.chat.repository.RoomMemberRepository;
 import com.chat.repository.RoomRepository;
 import com.chat.repository.UserRepository;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -36,7 +38,7 @@ public class RoomService {
     @Transactional
     public Room createPublicRoom(String name, Long ownerId) {
         userRepository.findById(ownerId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
 
         Room room = new Room();
         room.setId(idGenerator.nextId());
@@ -64,9 +66,9 @@ public class RoomService {
         }
 
         userRepository.findById(userId1)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
         User user2 = userRepository.findById(userId2)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
 
         Room room = new Room();
         room.setId(idGenerator.nextId());
@@ -130,6 +132,18 @@ public class RoomService {
         return roomMemberRepository.findByRoomId(roomId).stream()
                 .map(RoomMember::getUserId)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, List<Long>> getRoomMemberIdsByRoomIds(List<Long> roomIds) {
+        if (roomIds.isEmpty()) {
+            return Map.of();
+        }
+        List<RoomMember> members = roomMemberRepository.findByRoomIdIn(roomIds);
+        return members.stream()
+                .collect(Collectors.groupingBy(
+                        RoomMember::getRoomId,
+                        Collectors.mapping(RoomMember::getUserId, Collectors.toList())));
     }
 
     @Transactional(readOnly = true)

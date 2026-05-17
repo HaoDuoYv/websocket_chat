@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "room_members")
+@Table(name = "room_members", indexes = {
+    @Index(name = "idx_room_member_room_id", columnList = "room_id"),
+    @Index(name = "idx_room_member_user_id", columnList = "user_id")
+})
 @IdClass(RoomMemberId.class)
 public class RoomMember {
     @Id

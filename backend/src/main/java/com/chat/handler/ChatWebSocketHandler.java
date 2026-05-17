@@ -372,33 +372,36 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Long userId = parseLongId(data.get("userId"));
 
         List<Room> rooms = roomService.getUserRooms(userId);
+        List<Long> roomIds = rooms.stream().map(Room::getId).collect(Collectors.toList());
+
+        // 批量查询：一次获取所有房间的最后一条消息和成员列表
+        Map<Long, Message> latestMessages = messageService.getLatestMessagesByRoomIds(roomIds);
+        Map<Long, List<Long>> roomMembersMap = roomService.getRoomMemberIdsByRoomIds(roomIds);
+
         List<Map<String, Object>> roomList = rooms.stream().map(room -> {
             Map<String, Object> roomMap = new HashMap<>();
-            // 将 ID 转为 String 避免前端精度丢失
             roomMap.put("id", String.valueOf(room.getId()));
             roomMap.put("name", room.getName());
             roomMap.put("type", room.getType());
             roomMap.put("ownerId", String.valueOf(room.getOwnerId()));
             roomMap.put("createdAt", room.getCreatedAt());
 
-            // 获取最后一条消息
-            Optional<Message> lastMsg = messageService.getLatestMessage(room.getId());
-            if (lastMsg.isPresent()) {
-                Message msg = lastMsg.get();
+            // 从批量查询结果中获取最后一条消息
+            Message lastMsg = latestMessages.get(room.getId());
+            if (lastMsg != null) {
                 Map<String, Object> lastMessageMap = new HashMap<>();
-                // 将 ID 转为 String 避免前端精度丢失
-                lastMessageMap.put("id", String.valueOf(msg.getId()));
-                lastMessageMap.put("content", msg.getContent());
-                lastMessageMap.put("senderId", String.valueOf(msg.getSenderId()));
-                lastMessageMap.put("senderName", messageService.getSenderName(userId, msg.getSenderId()));
-                lastMessageMap.put("timestamp", msg.getTimestamp());
-                lastMessageMap.put("type", msg.getType());
+                lastMessageMap.put("id", String.valueOf(lastMsg.getId()));
+                lastMessageMap.put("content", lastMsg.getContent());
+                lastMessageMap.put("senderId", String.valueOf(lastMsg.getSenderId()));
+                lastMessageMap.put("senderName", messageService.getSenderName(userId, lastMsg.getSenderId()));
+                lastMessageMap.put("timestamp", lastMsg.getTimestamp());
+                lastMessageMap.put("type", lastMsg.getType());
                 roomMap.put("lastMessage", lastMessageMap);
             }
 
             // 私聊房间显示对方用户名
             if ("private".equals(room.getType())) {
-                List<Long> memberIds = roomService.getRoomMemberIds(room.getId());
+                List<Long> memberIds = roomMembersMap.getOrDefault(room.getId(), List.of());
                 Long partnerId = memberIds.stream()
                         .filter(id -> !id.equals(userId))
                         .findFirst()

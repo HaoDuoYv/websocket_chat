@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "rooms")
+@Table(name = "rooms", indexes = {
+    @Index(name = "idx_room_owner_id", columnList = "owner_id")
+})
 public class Room {
     @Id
     @JsonSerialize(using = ToStringSerializer.class)

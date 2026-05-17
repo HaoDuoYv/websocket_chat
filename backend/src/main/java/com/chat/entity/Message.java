@@ -5,7 +5,11 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "messages")
+@Table(name = "messages", indexes = {
+    @Index(name = "idx_message_room_id", columnList = "room_id"),
+    @Index(name = "idx_message_room_seq", columnList = "room_id, seq"),
+    @Index(name = "idx_message_sender_id", columnList = "sender_id")
+})
 public class Message {
     @Id
     private String id;  // UUID

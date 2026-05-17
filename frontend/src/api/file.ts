@@ -12,12 +12,6 @@ export interface FileUploadResponse {
   fileType: string
 }
 
-export const normalizeFileUrl = (fileUrl: string): string => {
-  if (!fileUrl) return fileUrl
-
-  return fileUrl
-}
-
 export const uploadFile = async (
   file: File,
   chatId: string,
@@ -69,13 +63,23 @@ export const formatFileSize = (bytes: number): string => {
 }
 
 // 判断是否为图片文件
-export const isImageFile = (fileType: string): boolean => {
-  return fileType?.startsWith('image/') || false
+export const isImageFile = (fileType: string, fileName?: string): boolean => {
+  if (fileType?.startsWith('image/')) return true
+  if (fileName) {
+    const ext = fileName.split('.').pop()?.toLowerCase() || ''
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)
+  }
+  return false
 }
 
 // 判断是否为视频文件
-export const isVideoFile = (fileType: string): boolean => {
-  return fileType?.startsWith('video/') || false
+export const isVideoFile = (fileType: string, fileName?: string): boolean => {
+  if (fileType?.startsWith('video/')) return true
+  if (fileName) {
+    const ext = fileName.split('.').pop()?.toLowerCase() || ''
+    return ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'webm'].includes(ext)
+  }
+  return false
 }
 
 // 增强的文件图标映射
@@ -159,7 +163,7 @@ export const getFileIcon = (fileName: string): string => {
 }
 
 // 文件类型描述
-export const getFileTypeDescription = (fileType: string): string => {
+export const getFileTypeDescription = (fileType: string, fileName?: string): string => {
   const typeMap: Record<string, string> = {
     'image/jpeg': 'JPEG 图片',
     'image/png': 'PNG 图片',
@@ -193,7 +197,25 @@ export const getFileTypeDescription = (fileType: string): string => {
     'video/x-msvideo': 'WMV 视频',
     'video/x-matroska': 'MKV 视频',
   }
-  return typeMap[fileType] || '文件'
+  if (typeMap[fileType]) return typeMap[fileType]
+
+  // 按扩展名兜底
+  if (fileName) {
+    const ext = fileName.split('.').pop()?.toLowerCase() || ''
+    const extMap: Record<string, string> = {
+      jpg: 'JPEG 图片', jpeg: 'JPEG 图片', png: 'PNG 图片', gif: 'GIF 图片',
+      webp: 'WebP 图片', svg: 'SVG 图片', bmp: 'BMP 图片', ico: 'ICO 图片',
+      pdf: 'PDF 文档', doc: 'Word 文档', docx: 'Word 文档',
+      xls: 'Excel 表格', xlsx: 'Excel 表格',
+      ppt: 'PowerPoint 演示', pptx: 'PowerPoint 演示',
+      mp3: 'MP3 音频', wav: 'WAV 音频', flac: 'FLAC 音频',
+      mp4: 'MP4 视频', avi: 'AVI 视频', mov: 'MOV 视频', mkv: 'MKV 视频',
+      zip: 'ZIP 压缩文件', rar: 'RAR 压缩文件', '7z': '7Z 压缩文件',
+    }
+    if (extMap[ext]) return extMap[ext]
+  }
+
+  return '文件'
 }
 
 // 判断是否为 PDF 文件

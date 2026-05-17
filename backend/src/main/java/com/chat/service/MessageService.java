@@ -12,8 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class MessageService {
@@ -29,6 +32,8 @@ public class MessageService {
 
     @Autowired
     private UserRemarkService userRemarkService;
+
+    private final ConcurrentHashMap<Long, AtomicLong> roomSeqCache = new ConcurrentHashMap<>();
 
     @Transactional
     public Message sendMessage(Long roomId, Long senderId, String content, String type) {
@@ -86,6 +91,19 @@ public class MessageService {
     }
 
     @Transactional(readOnly = true)
+    public Map<Long, Message> getLatestMessagesByRoomIds(List<Long> roomIds) {
+        if (roomIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Message> messages = messageRepository.findLatestMessagesByRoomIds(roomIds);
+        Map<Long, Message> result = new java.util.HashMap<>();
+        for (Message msg : messages) {
+            result.merge(msg.getRoomId(), msg, (a, b) -> a.getSeq() > b.getSeq() ? a : b);
+        }
+        return result;
+    }
+
+    @Transactional(readOnly = true)
     public List<Message> getAllMessages(Long roomId) {
         return messageRepository.findByRoomIdOrderBySeqAsc(roomId);
     }
@@ -123,8 +141,11 @@ public class MessageService {
         return userRemarkService.getDisplayName(viewerId, senderId, defaultName);
     }
 
-    private synchronized Long getNextSeq(Long roomId) {
-        Long maxSeq = messageRepository.findMaxSeqByRoomId(roomId).orElse(0L);
-        return maxSeq + 1;
+    private Long getNextSeq(Long roomId) {
+        AtomicLong seqCounter = roomSeqCache.computeIfAbsent(roomId, id -> {
+            Long maxSeq = messageRepository.findMaxSeqByRoomId(id).orElse(0L);
+            return new AtomicLong(maxSeq);
+        });
+        return seqCounter.incrementAndGet();
     }
 }

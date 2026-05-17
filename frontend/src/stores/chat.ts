@@ -1,0 +1,169 @@
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+export interface User {
+  userId: string
+  username: string
+  isOnline?: boolean
+}
+
+export interface FileInfo {
+  fileId: string
+  fileName: string
+  fileUrl: string
+  fileSize: number
+  fileType: string
+}
+
+export interface Message {
+  id: string
+  roomId: string
+  content: string
+  senderId: string
+  senderName: string
+  timestamp: number
+  seq: number
+  type?: 'text' | 'file' | 'system'
+  fileInfo?: FileInfo
+  fileId?: string
+  fileName?: string
+  fileUrl?: string
+  fileSize?: number
+  fileType?: string
+}
+
+export interface Room {
+  id: string
+  name: string
+  type: 'public' | 'private'
+  ownerId?: string
+  createdAt: number
+  lastMessage?: Message
+}
+
+export interface InviteResult {
+  success: boolean
+  message: string
+  targetUserId?: string
+}
+
+export interface RoomMemberLeftEvent {
+  roomId: string
+  userId: string
+}
+
+const MAX_MESSAGES = 500
+
+export const useChatStore = defineStore('chat', () => {
+  const isConnected = ref(false)
+  const reconnectAttempts = ref(0)
+  const messages = ref<Message[]>([])
+  const rooms = ref<Room[]>([])
+  const onlineUsers = ref<User[]>([])
+  const unreadCounts = ref<Record<string, number>>({})
+  const currentRoomId = ref<string>('')
+  const lastMessage = ref<Message | null>(null)
+  const lastInviteResult = ref<InviteResult | null>(null)
+  const lastBannedResult = ref<{ message: string } | null>(null)
+  const lastRoomMemberLeft = ref<RoomMemberLeftEvent | null>(null)
+  const lastPrivateRoomCreated = ref<{ id: string; name: string; type: string } | null>(null)
+  const roomLastSeq = ref<Record<string, number>>({})
+  const readReceipts = ref<Map<string, Set<string>>>(new Map())
+
+  const roomMessages = computed(() => {
+    return messages.value
+      .filter(msg => String(msg.roomId) === currentRoomId.value)
+      .sort((a, b) => a.seq - b.seq)
+  })
+
+  const currentRoom = computed(() => rooms.value.find(r => r.id === currentRoomId.value))
+
+  const getUnreadCount = (roomId: string): number => {
+    return unreadCounts.value[roomId] || 0
+  }
+
+  const getTotalUnreadCount = computed(() => {
+    return Object.values(unreadCounts.value).reduce((sum, count) => sum + count, 0)
+  })
+
+  function trimMessages() {
+    if (messages.value.length > MAX_MESSAGES * 2) {
+      const keepIds = new Set<string>()
+      const seenCounts = new Map<string, number>()
+      for (let i = messages.value.length - 1; i >= 0; i--) {
+        const msg = messages.value[i]
+        const rid = String(msg.roomId)
+        const count = seenCounts.get(rid) || 0
+        if (count < MAX_MESSAGES) {
+          keepIds.add(msg.id)
+          seenCounts.set(rid, count + 1)
+        }
+      }
+      messages.value = messages.value.filter(m => keepIds.has(m.id))
+    }
+  }
+
+  function addMessage(msg: Message) {
+    messages.value.push(msg)
+    lastMessage.value = msg
+
+    const roomIndex = rooms.value.findIndex(r => r.id === String(msg.roomId))
+    if (roomIndex !== -1) {
+      rooms.value[roomIndex].lastMessage = msg
+    }
+
+    if (currentRoomId.value !== String(msg.roomId)) {
+      const roomId = String(msg.roomId)
+      unreadCounts.value[roomId] = (unreadCounts.value[roomId] || 0) + 1
+    }
+
+    trimMessages()
+  }
+
+  function setCurrentRoom(roomId: string) {
+    currentRoomId.value = roomId
+    if (unreadCounts.value[roomId]) {
+      delete unreadCounts.value[roomId]
+    }
+  }
+
+  function clearState() {
+    messages.value = []
+    rooms.value = []
+    onlineUsers.value = []
+    unreadCounts.value = {}
+    currentRoomId.value = ''
+    lastMessage.value = null
+    lastInviteResult.value = null
+    lastBannedResult.value = null
+    lastRoomMemberLeft.value = null
+    lastPrivateRoomCreated.value = null
+    roomLastSeq.value = new Map() as any
+    readReceipts.value = new Map()
+  }
+
+  return {
+    isConnected,
+    reconnectAttempts,
+    messages,
+    rooms,
+    onlineUsers,
+    unreadCounts,
+    currentRoomId,
+    lastMessage,
+    lastInviteResult,
+    lastBannedResult,
+    lastRoomMemberLeft,
+    lastPrivateRoomCreated,
+    roomLastSeq,
+    readReceipts,
+    roomMessages,
+    currentRoom,
+    getUnreadCount,
+    getTotalUnreadCount,
+    trimMessages,
+    addMessage,
+    setCurrentRoom,
+    clearState
+  }
+})

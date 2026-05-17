@@ -1,9 +1,13 @@
 package com.chat.service;
 
 import com.chat.entity.User;
+import com.chat.exception.BusinessException;
+import com.chat.exception.UserBannedException;
 import com.chat.repository.UserRepository;
 import com.chat.utils.SnowflakeIdGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,9 +25,10 @@ public class UserService {
     private SnowflakeIdGenerator idGenerator;
 
     @Transactional
+    @CacheEvict(value = {"users", "usersByName"}, allEntries = true)
     public User register(String username) {
         if (userRepository.existsByUsername(username)) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException("用户名已存在");
         }
 
         User user = new User();
@@ -38,21 +43,21 @@ public class UserService {
     @Transactional(readOnly = true)
     public User login(String username) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("用户不存在，请先注册"));
+                .orElseThrow(() -> new BusinessException("用户不存在，请先注册"));
         if (user.isBanned()) {
-            throw new RuntimeException(user.getBannedReason() == null || user.getBannedReason().isBlank()
-                    ? "账号已被封禁"
-                    : "账号已被封禁：" + user.getBannedReason());
+            throw new UserBannedException(user.getBannedReason());
         }
         return user;
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "users", key = "#userId")
     public Optional<User> findById(Long userId) {
         return userRepository.findById(userId);
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "usersByName", key = "#username")
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
     }
@@ -75,25 +80,27 @@ public class UserService {
     }
 
     @Transactional
+    @CacheEvict(value = {"users", "usersByName"}, allEntries = true)
     public void renameUser(Long userId, String username) {
         if (username == null || username.trim().isEmpty()) {
-            throw new RuntimeException("用户名不能为空");
+            throw new BusinessException("用户名不能为空");
         }
         String trimmedUsername = username.trim();
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
         Optional<User> existingUser = userRepository.findByUsername(trimmedUsername);
         if (existingUser.isPresent() && !existingUser.get().getId().equals(userId)) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException("用户名已存在");
         }
         user.setUsername(trimmedUsername);
         userRepository.save(user);
     }
 
     @Transactional
+    @CacheEvict(value = {"users", "usersByName"}, allEntries = true)
     public void banUser(Long userId, String reason) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
         user.setBanned(true);
         user.setBannedAt(System.currentTimeMillis());
         user.setBannedReason(reason == null ? null : reason.trim());
@@ -101,9 +108,10 @@ public class UserService {
     }
 
     @Transactional
+    @CacheEvict(value = {"users", "usersByName"}, allEntries = true)
     public void unbanUser(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
         user.setBanned(false);
         user.setBannedAt(null);
         user.setBannedReason(null);
