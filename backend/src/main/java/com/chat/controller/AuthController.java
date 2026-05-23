@@ -30,6 +30,7 @@ public class AuthController {
             // 将 Long 类型的 ID 转为 String，避免前端 JavaScript 精度丢失
             response.put("userId", String.valueOf(user.getId()));
             response.put("username", user.getUsername());
+            response.put("avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "");
             response.put("createdAt", user.getCreatedAt());
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
@@ -50,6 +51,7 @@ public class AuthController {
             // 将 Long 类型的 ID 转为 String，避免前端 JavaScript 精度丢失
             response.put("userId", String.valueOf(user.getId()));
             response.put("username", user.getUsername());
+            response.put("avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "");
             response.put("createdAt", user.getCreatedAt());
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {

@@ -23,6 +23,11 @@ const routes = [
     component: () => import('@/pages/AdminPage.vue'),
   },
   {
+    path: '/admin/ai',
+    name: 'admin-ai',
+    component: () => import('@/components/AdminAiConfig.vue'),
+  },
+  {
     path: '/apps',
     name: 'apps',
     component: () => import('@/pages/AppsPage.vue'),
@@ -47,6 +52,16 @@ const routes = [
     name: 'editor-room',
     component: () => import('@/pages/EditorPage.vue'),
   },
+  {
+    path: '/ai/manage',
+    name: 'ai-manage',
+    component: () => import('@/pages/AiManagePage.vue'),
+  },
+  {
+    path: '/ai/:assistantId',
+    name: 'ai-chat',
+    component: () => import('@/pages/AiChatView.vue'),
+  },
 ]
 
 const router = createRouter({
@@ -59,11 +74,14 @@ const titleMap: Record<string, string> = {
   home: '聊天',
   chat: '聊天',
   admin: '管理后台',
+  'admin-ai': 'AI配置',
   apps: '应用中心',
   'gomoku-lobby': '应用大厅',
   'gomoku-game': '五子棋对局',
   'editor-new': '协作编辑器',
   'editor-room': '协作编辑器',
+  'ai-manage': 'AI助手管理',
+  'ai-chat': 'AI助手',
 }
 
 router.afterEach((to) => {

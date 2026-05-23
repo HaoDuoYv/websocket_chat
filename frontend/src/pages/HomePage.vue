@@ -8,11 +8,17 @@ import FileMessage from '@/components/FileMessage.vue'
 import FileUploadButton from '@/components/FileUploadButton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetRemarkDialog from '@/components/SetRemarkDialog.vue'
+import AvatarUpload from '@/components/AvatarUpload.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useAiStore } from '@/stores/ai'
 import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
+import { uploadUserAvatar } from '@/api/avatar'
+import { useToast } from '@/composables/useToast'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import { getUserRemarks, saveUserRemark } from '@/api/userRemark'
 import { emojiCategories } from '@/config/emojis'
+
+const toast = useToast()
 
 const PROJECT_NOTICE_STORAGE_KEY = 'project-notice-dismissed'
 const ACTIVE_TAB_STORAGE_KEY = 'home-active-tab'
@@ -52,6 +58,7 @@ const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 const isProjectNoticeOpen = ref(false)
 const hasShownProjectNotice = ref(false)
 const router = useRouter()
+const aiStore = useAiStore()
 const {
   connect,
   disconnect,
@@ -65,13 +72,16 @@ const {
   startPrivateChat,
   setCurrentRoom,
   loadMessageHistory,
-  socket,
+  sendInviteMember,
   lastInviteResult,
   lastBannedResult,
   lastRoomMemberLeft,
   lastPrivateRoomCreated,
   readReceipts,
 } = useWebSocket()
+
+const systemAssistant = computed(() => aiStore.systemAssistant)
+const userAssistants = computed(() => aiStore.userAssistants)
 
 const selectedRoomId = ref<string | null>(null)
 const newMessage = ref('')
@@ -114,6 +124,10 @@ const browserNotificationEnabled = ref(false)
 const notificationAudio = typeof Audio !== 'undefined' ? new Audio('/notification.mp3') : null
 const floatingNotices = ref<FloatingNotice[]>([])
 const unreadPageCount = computed(() => rooms.value.reduce((total, room) => total + getUnreadCount(room.id), 0))
+
+const isProfileDialogOpen = ref(false)
+const avatarUploadRef = ref<InstanceType<typeof AvatarUpload> | null>(null)
+const isUploadingAvatar = ref(false)
 
 const filteredRooms = computed(() => {
   if (!searchQuery.value.trim()) return rooms.value
@@ -182,9 +196,12 @@ const isGroupChat = computed(() => {
 const onlineStatusText = computed(() => {
   if (!currentRoom.value) return ''
   if (isGroupChat.value) {
-    return `${roomMembers.value.length || 0} 位成员`
+    const onlineCount = onlineUsers.value.filter(item => item.isOnline !== false).length
+    const totalCount = roomMembers.value.length || 0
+    return `${totalCount} 位成员 · ${onlineCount} 人在线`
   }
-  return `${onlineUsers.value.filter(item => item.isOnline !== false).length} 人在线`
+  const isOnline = onlineUsers.value.some(u => u.isOnline !== false)
+  return isOnline ? '在线' : '离线'
 })
 
 const canSend = computed(() => {
@@ -555,7 +572,7 @@ watch(lastInviteResult, async result => {
     await loadRoomMembers(selectedRoomId.value)
   }
 
-  alert(result.message)
+  toast.show(result.message)
   lastInviteResult.value = null
 })
 
@@ -594,7 +611,7 @@ watch(messages, async (newMessages, oldMessages) => {
 
 watch(lastBannedResult, result => {
   if (!result) return
-  alert(result.message)
+  toast.error(result.message)
   handleLogout()
   lastBannedResult.value = null
 })
@@ -639,10 +656,25 @@ onMounted(() => {
     connect(user.value)
     loadUserRemarks(user.value.userId)
     startUserRemarkAutoRefresh()
+    loadAiAssistants()
   }
   ensureNotificationPermission()
   window.addEventListener('keydown', handleAttachmentPreviewKeydown)
 })
+
+const loadAiAssistants = async () => {
+  try {
+    const userId = user.value?.userId || ''
+    const response = await fetch(`/api/ai/assistants?userId=${userId}`)
+    if (response.ok) {
+      const data = await response.json()
+      aiStore.setSystemAssistant(data.system || null)
+      aiStore.setUserAssistants(data.user || [])
+    }
+  } catch (error) {
+    console.error('加载AI助手失败:', error)
+  }
+}
 
 onUnmounted(() => {
   clearPendingAttachments()
@@ -658,6 +690,14 @@ const handleRoomClick = (roomId: string) => {
 
 const handleCreateGroup = () => {
   isCreateDialogOpen.value = true
+}
+
+const handleSystemAiClick = () => {
+  if (systemAssistant.value) {
+    router.push(`/ai/${systemAssistant.value.id}`)
+  } else {
+    toast.warning('管理员未配置AI服务，无法使用系统助手')
+  }
 }
 
 const handleCreateGroupSubmit = (name: string, participants: string[]) => {
@@ -796,7 +836,7 @@ const handleSaveRemark = async (remarkName: string) => {
     closeRemarkDialog()
     window.location.reload()
   } catch (error: any) {
-    alert(error?.response?.data?.message || '保存备注失败')
+    toast.error(error?.response?.data?.message || '保存备注失败')
   }
 }
 
@@ -812,6 +852,39 @@ const handleLogout = () => {
   rooms.value = []
   onlineUsers.value = []
   selectedRoomId.value = null
+}
+
+const handleAvatarUpload = async (file: File) => {
+  if (!user.value) return
+  
+  isUploadingAvatar.value = true
+  avatarUploadRef.value?.setUploading(true)
+  
+  try {
+    const response = await uploadUserAvatar(
+      Number(user.value.userId),
+      file,
+      (progress) => {
+        avatarUploadRef.value?.setProgress(progress)
+      }
+    )
+    
+    if (response.success) {
+      // Update user data
+      user.value = { ...user.value, avatarUrl: response.url }
+      localStorage.setItem('user', JSON.stringify(user.value))
+      
+      toast.success('头像更新成功')
+    } else {
+      toast.error(response.message || '头像上传失败')
+    }
+  } catch (error: any) {
+    toast.error(error?.message || '头像上传失败')
+  } finally {
+    isUploadingAvatar.value = false
+    avatarUploadRef.value?.setUploading(false)
+    avatarUploadRef.value?.setProgress(0)
+  }
 }
 
 const handleLogin = (userData: any) => {
@@ -875,11 +948,11 @@ const handleKickMember = (memberId: string, memberName: string) => {
           }
         } else {
           const data = await res.json()
-          alert(data.message || '移出成员失败')
+          toast.error(data.message || '移出成员失败')
         }
       } catch (error) {
         console.error('移出成员失败:', error)
-        alert('移出成员失败')
+        toast.error('移出成员失败')
       }
     }
   )
@@ -908,11 +981,11 @@ const handleDissolveRoom = () => {
           clearPendingAttachments()
         } else {
           const data = await res.json()
-          alert(data.message || '解散群聊失败')
+          toast.error(data.message || '解散群聊失败')
         }
       } catch (error) {
         console.error('解散群聊失败:', error)
-        alert('解散群聊失败')
+        toast.error('解散群聊失败')
       }
     }
   )
@@ -923,13 +996,7 @@ const handleInviteMember = async (targetUserId: string) => {
 
   const roomId = selectedRoomId.value
 
-  socket.value?.send(JSON.stringify({
-    type: 'room:invite:member',
-    data: {
-      roomId,
-      targetUserId
-    }
-  }))
+  sendInviteMember(roomId, targetUserId)
 
   showInviteDialog.value = false
 }
@@ -1218,6 +1285,27 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           </svg>
         </button>
 
+        <!-- 用户头像 -->
+        <button
+          @click="isProfileDialogOpen = true"
+          class="w-10 h-10 flex items-center justify-center transition-colors relative"
+          :class="isDarkTheme ? 'text-white hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'"
+          title="个人资料"
+        >
+          <img 
+            v-if="user?.avatarUrl" 
+            :src="user.avatarUrl" 
+            class="w-8 h-8 rounded-full object-cover"
+          />
+          <div 
+            v-else
+            class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
+            style="background: linear-gradient(135deg, #667eea, #764ba2)"
+          >
+            {{ user?.username?.charAt(0)?.toUpperCase() || '?' }}
+          </div>
+        </button>
+
         <button
           @click="handleLogout"
           class="w-10 h-10 flex items-center justify-center transition-colors"
@@ -1264,6 +1352,80 @@ const isRoomReadByOthers = (roomId: string): boolean => {
         </div>
       </header>
 
+      <!-- AI助手列表 -->
+      <div v-if="activeTab === 'messages'" class="px-3 py-2 border-b" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
+        <div class="flex items-center justify-between px-2 mb-2">
+          <span class="text-xs font-medium uppercase tracking-wider" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">AI助手</span>
+          <button 
+            @click="router.push('/ai/manage')"
+            class="text-xs px-2 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'"
+          >
+            管理
+          </button>
+        </div>
+        <!-- 系统AI - 始终显示 -->
+        <div 
+          @click="handleSystemAiClick"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors"
+          :class="isDarkTheme ? 'hover:bg-gray-800' : 'hover:bg-gray-50'"
+        >
+          <img 
+            v-if="(systemAssistant as any)?.avatarUrl" 
+            :src="(systemAssistant as any).avatarUrl" 
+            class="w-10 h-10 rounded-full object-cover"
+          />
+          <div 
+            v-else
+            class="w-10 h-10 rounded-full flex items-center justify-center text-white text-lg"
+            :style="{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }"
+          >
+            🤖
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">
+              {{ systemAssistant?.name || '系统助手' }}
+            </h3>
+            <p class="text-xs truncate" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
+              {{ systemAssistant ? '点击开始对话' : '管理员未配置AI服务' }}
+            </p>
+          </div>
+        </div>
+        <!-- 用户自建AI -->
+        <div 
+          v-for="ai in userAssistants.slice(0, 3)" 
+          :key="ai.id"
+          @click="router.push(`/ai/${ai.id}`)"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors"
+          :class="isDarkTheme ? 'hover:bg-gray-800' : 'hover:bg-gray-50'"
+        >
+          <img 
+            v-if="(ai as any).avatarUrl" 
+            :src="(ai as any).avatarUrl" 
+            class="w-10 h-10 rounded-full object-cover"
+          />
+          <div 
+            v-else
+            class="w-10 h-10 rounded-full flex items-center justify-center text-white text-lg"
+            :style="{ background: ai.avatarColor || 'linear-gradient(135deg, #f093fb, #f5576c)' }"
+          >
+            {{ ai.avatarIcon || '✨' }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ ai.name }}</h3>
+            <p class="text-xs truncate" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">{{ ai.model }}</p>
+          </div>
+        </div>
+        <div 
+          v-if="userAssistants.length > 3"
+          @click="router.push('/ai/manage')"
+          class="text-center py-2 text-xs cursor-pointer"
+          :class="isDarkTheme ? 'text-gray-500 hover:text-gray-400' : 'text-gray-400 hover:text-gray-500'"
+        >
+          查看全部 {{ userAssistants.length }} 个助手
+        </div>
+      </div>
+
       <!-- 消息列表 -->
       <div v-if="activeTab === 'messages'" class="flex-1 overflow-y-auto">
         <div v-if="filteredRooms.length === 0" class="flex flex-col items-center justify-center h-48" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-300'">
@@ -1280,23 +1442,45 @@ const isRoomReadByOthers = (roomId: string): boolean => {
               isDarkTheme ? 'border-gray-800' : 'border-gray-50',
               selectedRoomId === room.id
                 ? (isDarkTheme ? 'bg-gray-800' : 'bg-gray-50')
-                : (isDarkTheme ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50/50')
+                : (isDarkTheme ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50/50'),
+              selectedRoomId === room.id && 'border-l-2',
+              selectedRoomId === room.id && room.type === 'public' ? 'border-l-blue-500' : '',
+              selectedRoomId === room.id && room.type === 'private' ? 'border-l-emerald-500' : ''
             ]"
           >
             <!-- 头像 - 简约圆形 -->
             <div class="relative">
               <div
                 class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
-                :style="{ backgroundColor: getAvatarColor(room.id) }"
+                :style="{ backgroundColor: room.type === 'public' ? '#3B82F6' : '#10B981' }"
               >
-                {{ getAvatarText(getDisplayRoomName(room)) }}
+                {{ room.type === 'public' ? '群' : getAvatarText(getDisplayRoomName(room)) }}
               </div>
+              <!-- 群聊图标叠加层 -->
+              <div v-if="room.type === 'public'" class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center" :class="isDarkTheme ? 'bg-[#18181B]' : 'bg-white'">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <!-- 单聊在线状态指示 -->
+              <div v-else class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2" :class="isDarkTheme ? 'bg-green-500 border-[#18181B]' : 'bg-green-500 border-white'"></div>
             </div>
 
             <!-- 内容 - 极简信息 -->
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between mb-0.5">
-                <h3 class="font-medium text-sm truncate" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ getDisplayRoomName(room) }}</h3>
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <h3 class="font-medium text-sm truncate" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ getDisplayRoomName(room) }}</h3>
+                  <span 
+                    class="shrink-0 text-[10px] px-1 py-0.5 rounded font-medium"
+                    :class="room.type === 'public' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'"
+                  >
+                    {{ room.type === 'public' ? '群' : '私' }}
+                  </span>
+                </div>
                 <span v-if="room.lastMessage" class="text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
                   {{ formatTime(room.lastMessage.timestamp) }}
                 </span>
@@ -1366,7 +1550,13 @@ const isRoomReadByOthers = (roomId: string): boolean => {
       <!-- 底部用户信息 -->
       <div class="px-5 py-3 border-t" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-50'">
         <div class="flex items-center gap-3">
+          <img 
+            v-if="user?.avatarUrl" 
+            :src="user.avatarUrl" 
+            class="w-8 h-8 rounded-full object-cover"
+          />
           <div
+            v-else
             class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
             :style="{ backgroundColor: getAvatarColor(user?.userId || '') }"
           >
@@ -1410,14 +1600,35 @@ const isRoomReadByOthers = (roomId: string): boolean => {
         <!-- 顶部栏 - 极简 -->
         <header class="px-6 py-4 border-b flex items-center justify-between" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-50'">
           <div class="flex items-center gap-3">
-            <div
-              class="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-medium"
-              :style="{ backgroundColor: getAvatarColor(selectedRoomId) }"
-            >
-              {{ getAvatarText(currentRoom?.name || '') }}
+            <div class="relative">
+              <div
+                class="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                :style="{ backgroundColor: isGroupChat ? '#3B82F6' : '#10B981' }"
+              >
+                {{ isGroupChat ? '群' : getAvatarText(currentRoom?.name || '') }}
+              </div>
+              <!-- 群聊图标叠加层 -->
+              <div v-if="isGroupChat" class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center" :class="isDarkTheme ? 'bg-[#18181B]' : 'bg-white'">
+                <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <!-- 单聊在线状态指示 -->
+              <div v-else class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2" :class="isDarkTheme ? 'bg-green-500 border-[#18181B]' : 'bg-green-500 border-white'"></div>
             </div>
             <div>
-              <h1 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ currentRoom ? getDisplayRoomName(currentRoom) : '' }}</h1>
+              <div class="flex items-center gap-1.5">
+                <h1 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ currentRoom ? getDisplayRoomName(currentRoom) : '' }}</h1>
+                <span 
+                  class="text-[10px] px-1 py-0.5 rounded font-medium"
+                  :class="isGroupChat ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'"
+                >
+                  {{ isGroupChat ? '群聊' : '私聊' }}
+                </span>
+              </div>
               <p class="text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">{{ onlineStatusText }}</p>
             </div>
           </div>
@@ -2128,4 +2339,71 @@ const isRoomReadByOthers = (roomId: string): boolean => {
     :is-dark="isDarkTheme"
     @close="previewingFile = null"
   />
+
+  <!-- 个人资料弹窗 -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div 
+        v-if="isProfileDialogOpen"
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50"
+        @click.self="isProfileDialogOpen = false"
+      >
+        <div 
+          class="w-full max-w-sm mx-4 rounded-2xl shadow-xl overflow-hidden"
+          :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white'"
+        >
+          <!-- 头部 -->
+          <div class="px-6 py-4 border-b" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-medium" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">个人资料</h3>
+              <button
+                @click="isProfileDialogOpen = false"
+                class="p-1 rounded-lg transition-colors"
+                :class="isDarkTheme ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- 内容 -->
+          <div class="px-6 py-6">
+            <div class="flex flex-col items-center gap-4">
+              <AvatarUpload
+                ref="avatarUploadRef"
+                :model-value="user?.avatarUrl"
+                :default-icon="user?.username?.charAt(0)?.toUpperCase()"
+                size="xl"
+                hint="点击头像更换（JPG/PNG/GIF/WebP，最大5MB）"
+                @upload="handleAvatarUpload"
+              />
+              
+              <div class="text-center">
+                <p class="text-lg font-medium" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">
+                  {{ user?.username }}
+                </p>
+                <p class="text-sm mt-1" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">
+                  ID: {{ user?.userId }}
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 底部 -->
+          <div class="px-6 py-4 border-t" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
+            <button
+              @click="isProfileDialogOpen = false"
+              class="w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
+              :class="isDarkTheme ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+            >
+              完成
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>

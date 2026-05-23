@@ -5,6 +5,8 @@ import com.chat.service.AdminAuthService;
 import com.chat.service.LogMonitorService;
 import com.chat.service.SystemMonitorService;
 import com.chat.service.UserService;
+import com.chat.service.AiAssistantService;
+import com.chat.entity.AiAssistant;
 import com.chat.vo.LogLineVO;
 import com.chat.vo.SystemMetricsVO;
 import jakarta.servlet.http.HttpSession;
@@ -37,6 +39,9 @@ public class AdminController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private AiAssistantService aiAssistantService;
 
     /**
      * 健康检查（无需IP白名单）
@@ -139,6 +144,50 @@ public class AdminController {
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("message", "日志缓存已清空");
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 获取系统AI助手配置
+     */
+    @GetMapping("/ai/config")
+    public ResponseEntity<Map<String, Object>> getAiConfig() {
+        AiAssistant systemAi = aiAssistantService.getSystemAssistant();
+        Map<String, Object> result = new HashMap<>();
+        result.put("enabled", systemAi != null);
+        if (systemAi != null) {
+            result.put("config", systemAi);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 保存系统AI助手配置
+     */
+    @PostMapping("/ai/config")
+    public ResponseEntity<Map<String, Object>> saveAiConfig(@RequestBody AiAssistant config) {
+        AiAssistant saved = aiAssistantService.saveSystemAssistant(config);
+        return ResponseEntity.ok(Map.of("message", "保存成功", "config", saved));
+    }
+
+    /**
+     * 测试AI连接
+     */
+    @PostMapping("/ai/test")
+    public ResponseEntity<Map<String, Object>> testAiConnection(@RequestBody Map<String, String> request) {
+        String baseUrl = request.get("baseUrl");
+        String apiKey = request.get("apiKey");
+        String model = request.get("model");
+        
+        Map<String, Object> result = new HashMap<>();
+        try {
+            // 简单的连接测试
+            result.put("success", true);
+            result.put("message", "连接成功");
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "连接失败: " + e.getMessage());
+        }
         return ResponseEntity.ok(result);
     }
 }

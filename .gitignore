@@ -23,7 +23,12 @@ AGENTS.md
 *.swp
 *.swo
 *~
-
+.superpowers/
+docs/
+backend/data/chat.db
+backend/uploads/
+backend/target/
+backend/chat_data/
 # OS generated files
 .DS_Store
 .DS_Store?

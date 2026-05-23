@@ -1,7 +1,8 @@
-import { ref, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useChatStore } from '@/stores/chat'
+import { useAiStore } from '@/stores/ai'
 import type { Message, User, FileInfo, Room } from '@/stores/chat'
+import type { AiConversation, AiMessage } from '@/stores/ai'
 
 interface WebSocketEvent {
   type: string
@@ -19,6 +20,14 @@ function showMessageNotification(senderName: string, body: string) {
     new Notification(senderName, { body })
   }
 }
+
+// 模块级单例 — 所有组件共享同一个 socket
+let sharedSocket: WebSocket | null = null
+let currentUserId = ''
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let currentUser: User | null = null
+const MAX_RECONNECT_ATTEMPTS = 10
+const BASE_RECONNECT_DELAY = 1000
 
 export function useWebSocket() {
   const store = useChatStore()
@@ -38,15 +47,16 @@ export function useWebSocket() {
     readReceipts
   } = storeToRefs(store)
 
-  const socket = ref<WebSocket | null>(null)
-
-  let currentUserId = ''
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let currentUser: User | null = null
-  const MAX_RECONNECT_ATTEMPTS = 10
-  const BASE_RECONNECT_DELAY = 1000
-
   const connect = (user: User) => {
+    // 如果已连接同一用户，直接复用
+    if (sharedSocket && sharedSocket.readyState === WebSocket.OPEN && currentUserId === user.userId) {
+      isConnected.value = true
+      return
+    }
+    // 关闭旧连接
+    if (sharedSocket && sharedSocket.readyState !== WebSocket.CLOSED) {
+      sharedSocket.close()
+    }
     currentUserId = user.userId
     currentUser = user
     store.reconnectAttempts = 0
@@ -59,9 +69,9 @@ export function useWebSocket() {
       reconnectTimer = null
     }
 
-    socket.value = new WebSocket('/ws/chat')
+    sharedSocket = new WebSocket('/ws/chat')
 
-    socket.value.onopen = () => {
+    sharedSocket.onopen = () => {
       console.log('WebSocket connected')
       isConnected.value = true
       reconnectAttempts.value = 0
@@ -75,7 +85,7 @@ export function useWebSocket() {
           username: user.username
         }
       }
-      socket.value?.send(JSON.stringify(joinEvent))
+      sharedSocket?.send(JSON.stringify(joinEvent))
 
       const listEvent: WebSocketEvent = {
         type: 'room:list',
@@ -83,20 +93,20 @@ export function useWebSocket() {
           userId: user.userId
         }
       }
-      socket.value?.send(JSON.stringify(listEvent))
+      sharedSocket?.send(JSON.stringify(listEvent))
 
       const userListEvent: WebSocketEvent = {
         type: 'user:list',
         data: {}
       }
-      socket.value?.send(JSON.stringify(userListEvent))
+      sharedSocket?.send(JSON.stringify(userListEvent))
 
       setTimeout(() => {
         syncRooms()
       }, 500)
     }
 
-    socket.value.onmessage = (event) => {
+    sharedSocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as WebSocketEvent
         handleEvent(data)
@@ -105,7 +115,7 @@ export function useWebSocket() {
       }
     }
 
-    socket.value.onclose = () => {
+    sharedSocket.onclose = () => {
       console.log('WebSocket disconnected')
       isConnected.value = false
 
@@ -119,7 +129,7 @@ export function useWebSocket() {
       }
     }
 
-    socket.value.onerror = (error) => {
+    sharedSocket.onerror = (error) => {
       console.error('WebSocket error:', error)
     }
   }
@@ -293,6 +303,59 @@ export function useWebSocket() {
         }
         break
       }
+
+      // AI相关事件
+      case 'ai:chat:stream': {
+        const aiStore = useAiStore()
+        const { token, done } = event.data
+        if (done) {
+          aiStore.endStream()
+        } else {
+          if (!aiStore.isStreaming) {
+            aiStore.startStream()
+          }
+          aiStore.appendStreamToken(token)
+        }
+        break
+      }
+
+      case 'ai:chat:complete': {
+        const aiStore = useAiStore()
+        const message = event.data as AiMessage
+        aiStore.addMessageFromStream(message)
+        aiStore.clearError()
+        break
+      }
+
+      case 'ai:chat:error': {
+        const aiStore = useAiStore()
+        aiStore.endStream()
+        aiStore.setError(event.data.message || 'AI调用失败')
+        console.error('AI chat error:', event.data.message)
+        break
+      }
+
+      case 'ai:conversation:created': {
+        const aiStore = useAiStore()
+        const conversation = event.data.conversation as AiConversation
+        aiStore.addConversation(conversation)
+        aiStore.setCurrentConversation(conversation)
+        break
+      }
+
+      case 'ai:conversation:list': {
+        const aiStore = useAiStore()
+        const conversations = event.data.conversations as AiConversation[]
+        aiStore.setConversations(conversations)
+        break
+      }
+
+      case 'ai:history': {
+        const aiStore = useAiStore()
+        const messages = event.data.messages as AiMessage[]
+        aiStore.setMessages(messages)
+        break
+      }
     }
   }
 
@@ -301,7 +364,7 @@ export function useWebSocket() {
       type: 'message:send',
       data: { roomId, content }
     }
-    socket.value?.send(JSON.stringify(messageEvent))
+    sharedSocket?.send(JSON.stringify(messageEvent))
   }
 
   const sendFileMessage = (roomId: string, _senderId: string, fileInfo: FileInfo) => {
@@ -316,7 +379,7 @@ export function useWebSocket() {
         fileType: fileInfo.fileType
       }
     }
-    socket.value?.send(JSON.stringify(fileMessageEvent))
+    sharedSocket?.send(JSON.stringify(fileMessageEvent))
   }
 
   const createRoom = (name: string, participants: string[]) => {
@@ -324,7 +387,7 @@ export function useWebSocket() {
       type: 'room:create',
       data: { name, participants }
     }
-    socket.value?.send(JSON.stringify(createEvent))
+    sharedSocket?.send(JSON.stringify(createEvent))
   }
 
   const joinRoom = (roomId: string) => {
@@ -332,16 +395,16 @@ export function useWebSocket() {
       type: 'room:join',
       data: { roomId }
     }
-    socket.value?.send(JSON.stringify(joinEvent))
+    sharedSocket?.send(JSON.stringify(joinEvent))
   }
 
   const sendReadReceipt = (roomId: string) => {
-    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) return
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
     const readEvent: WebSocketEvent = {
       type: 'message:read',
       data: { roomId, userId: currentUserId }
     }
-    socket.value.send(JSON.stringify(readEvent))
+    sharedSocket.send(JSON.stringify(readEvent))
   }
 
   const startPrivateChat = (targetUserId: string) => {
@@ -349,11 +412,11 @@ export function useWebSocket() {
       type: 'room:private:start',
       data: { targetUserId }
     }
-    socket.value?.send(JSON.stringify(privateEvent))
+    sharedSocket?.send(JSON.stringify(privateEvent))
   }
 
   const syncRooms = () => {
-    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) return
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
 
     const syncData = rooms.value.map(room => ({
       roomId: room.id,
@@ -364,11 +427,11 @@ export function useWebSocket() {
       type: 'room:sync',
       data: { rooms: syncData }
     }
-    socket.value.send(JSON.stringify(syncEvent))
+    sharedSocket.send(JSON.stringify(syncEvent))
   }
 
   const loadMessageHistory = (roomId: string) => {
-    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) {
       console.log('WebSocket not ready, retrying in 500ms...')
       setTimeout(() => loadMessageHistory(roomId), 500)
       return
@@ -377,7 +440,56 @@ export function useWebSocket() {
       type: 'message:history',
       data: { roomId }
     }
-    socket.value.send(JSON.stringify(historyEvent))
+    sharedSocket.send(JSON.stringify(historyEvent))
+  }
+
+  // AI相关函数
+  const sendAiChat = (assistantId: string, content: string, conversationId?: string) => {
+    const aiChatEvent: WebSocketEvent = {
+      type: 'ai:chat',
+      data: { assistantId, content, conversationId }
+    }
+    sharedSocket?.send(JSON.stringify(aiChatEvent))
+  }
+
+  const loadAiConversations = (assistantId: string) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket not ready, cannot load AI conversations')
+      return
+    }
+    const event: WebSocketEvent = {
+      type: 'ai:conversation:list',
+      data: { assistantId }
+    }
+    sharedSocket.send(JSON.stringify(event))
+  }
+
+  const createAiConversation = (assistantId: string, title?: string) => {
+    const event: WebSocketEvent = {
+      type: 'ai:conversation:create',
+      data: { assistantId, title }
+    }
+    sharedSocket?.send(JSON.stringify(event))
+  }
+
+  const deleteAiConversation = (conversationId: string) => {
+    const event: WebSocketEvent = {
+      type: 'ai:conversation:delete',
+      data: { conversationId }
+    }
+    sharedSocket?.send(JSON.stringify(event))
+  }
+
+  const loadAiHistory = (conversationId: string) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket not ready, cannot load AI history')
+      return
+    }
+    const event: WebSocketEvent = {
+      type: 'ai:history',
+      data: { conversationId }
+    }
+    sharedSocket.send(JSON.stringify(event))
   }
 
   const disconnect = () => {
@@ -387,7 +499,8 @@ export function useWebSocket() {
       reconnectTimer = null
     }
     reconnectAttempts.value = MAX_RECONNECT_ATTEMPTS
-    socket.value?.close()
+    sharedSocket?.close()
+    sharedSocket = null
   }
 
   const setCurrentRoom = (roomId: string) => {
@@ -395,16 +508,15 @@ export function useWebSocket() {
     sendReadReceipt(roomId)
   }
 
-  onUnmounted(() => {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-    disconnect()
-  })
+  const sendInviteMember = (roomId: string, targetUserId: string) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
+    sharedSocket.send(JSON.stringify({
+      type: 'room:invite:member',
+      data: { roomId, targetUserId }
+    }))
+  }
 
   return {
-    socket,
     isConnected,
     reconnectAttempts,
     messages,
@@ -430,6 +542,12 @@ export function useWebSocket() {
     getUnreadCount: store.getUnreadCount,
     getTotalUnreadCount: () => store.getTotalUnreadCount,
     loadMessageHistory,
-    syncRooms
+    syncRooms,
+    sendAiChat,
+    loadAiConversations,
+    createAiConversation,
+    deleteAiConversation,
+    loadAiHistory,
+    sendInviteMember
   }
 }

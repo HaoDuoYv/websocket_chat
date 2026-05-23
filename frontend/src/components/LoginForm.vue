@@ -36,7 +36,8 @@ const handleSubmit = async () => {
 
     const user = {
       userId: String(data.userId),
-      username: data.username
+      username: data.username,
+      avatarUrl: data.avatarUrl || ''
     }
 
     localStorage.setItem('user', JSON.stringify(user))

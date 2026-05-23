@@ -1,28 +1,48 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
 import FileMessage from '@/components/FileMessage.vue'
+import CodeBlock from '@/components/CodeBlock.vue'
 import { isImageFile } from '@/api/file'
 
 interface Message {
   id: string
-  roomId: string
+  roomId?: string
   content: string
-  senderId: string
-  senderName: string
-  timestamp: number
-  seq: number
+  senderId?: string
+  senderName?: string
+  timestamp?: number
+  createdAt?: number
+  seq?: number
   type?: 'text' | 'file' | 'system'
   fileId?: string
   fileName?: string
   fileUrl?: string
   fileSize?: number
   fileType?: string
+  role?: 'user' | 'assistant' | 'system'
+  conversationId?: string
+}
+
+interface AiAssistant {
+  id: string
+  name: string
+  avatarColor?: string
+}
+
+interface ContentSegment {
+  type: 'text' | 'code'
+  content: string
+  language?: string
 }
 
 const props = defineProps<{
   messages: Message[]
   currentUserId: string
   isDark: boolean
+  isAiMode?: boolean
+  currentAssistant?: AiAssistant | null
+  isStreaming?: boolean
+  streamContent?: string
 }>()
 
 const emit = defineEmits<{
@@ -57,17 +77,91 @@ const formatDate = (timestamp: number) => {
 
 const shouldShowDate = (index: number) => {
   if (index === 0) return true
-  return new Date(props.messages[index].timestamp).toDateString() !==
-    new Date(props.messages[index - 1].timestamp).toDateString()
+  const current = props.messages[index]
+  const prev = props.messages[index - 1]
+  const currentTime = current.timestamp || current.createdAt || 0
+  const prevTime = prev.timestamp || prev.createdAt || 0
+  return new Date(currentTime).toDateString() !== new Date(prevTime).toDateString()
 }
 
 const shouldShowTime = (index: number) => {
   if (index === 0) return true
-  return props.messages[index].timestamp - props.messages[index - 1].timestamp > 5 * 60 * 1000
+  const current = props.messages[index]
+  const prev = props.messages[index - 1]
+  const currentTime = current.timestamp || current.createdAt || 0
+  const prevTime = prev.timestamp || prev.createdAt || 0
+  return currentTime - prevTime > 5 * 60 * 1000
 }
 
 const isImageMessage = (msg: Message) =>
   msg.type === 'file' && isImageFile(msg.fileType || '', msg.fileName)
+
+const isAiMessage = (msg: Message) => {
+  if (props.isAiMode) {
+    return msg.role === 'assistant'
+  }
+  return false
+}
+
+// 解析内容为代码块和文本段落
+const parseContent = (content: string): ContentSegment[] => {
+  const segments: ContentSegment[] = []
+  const regex = /```(\w*)\n?([\s\S]*?)```/g
+  let lastIndex = 0
+  let match
+
+  while ((match = regex.exec(content)) !== null) {
+    // 添加代码块前的文本
+    if (match.index > lastIndex) {
+      const textBefore = content.slice(lastIndex, match.index)
+      if (textBefore.trim()) {
+        segments.push({ type: 'text', content: textBefore })
+      }
+    }
+    
+    // 添加代码块
+    const language = match[1] || ''
+    const code = match[2] || ''
+    if (code.trim()) {
+      segments.push({ type: 'code', content: code.trim(), language: language || undefined })
+    }
+    
+    lastIndex = match.index + match[0].length
+  }
+
+  // 添加剩余的文本
+  if (lastIndex < content.length) {
+    const remaining = content.slice(lastIndex)
+    if (remaining.trim()) {
+      segments.push({ type: 'text', content: remaining })
+    }
+  }
+
+  // 如果没有匹配到任何代码块，返回整个内容作为文本
+  if (segments.length === 0) {
+    segments.push({ type: 'text', content })
+  }
+
+  return segments
+}
+
+// 渲染纯文本（处理行内代码、粗体、斜体等）
+const renderInlineMarkdown = (text: string): string => {
+  return text
+    .replace(/`([^`]+)`/g, '<code class="bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-xs font-mono">$1</code>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>')
+}
+
+// 获取解析后的内容段落
+const getMessageSegments = (content: string): ContentSegment[] => {
+  return parseContent(content)
+}
+
+const copyMessage = (content: string) => {
+  navigator.clipboard.writeText(content)
+}
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -78,13 +172,14 @@ const scrollToBottom = () => {
 }
 
 watch(() => props.messages.length, () => scrollToBottom())
+watch(() => props.streamContent, () => scrollToBottom())
 
 defineExpose({ scrollToBottom })
 </script>
 
 <template>
   <div ref="container" class="flex-1 overflow-y-auto px-6 py-6">
-    <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full" :class="isDark ? 'text-gray-500' : 'text-gray-300'">
+    <div v-if="messages.length === 0 && !isStreaming" class="flex flex-col items-center justify-center h-full" :class="isDark ? 'text-gray-500' : 'text-gray-300'">
       <div class="w-14 h-14 bg-[#18181B] flex items-center justify-center mb-4">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -97,36 +192,90 @@ defineExpose({ scrollToBottom })
     <template v-else>
       <template v-for="(message, index) in messages" :key="message.id">
         <div v-if="shouldShowDate(index)" class="flex justify-center my-6">
-          <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-300'">{{ formatDate(message.timestamp) }}</span>
+          <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-300'">{{ formatDate(message.timestamp || message.createdAt || 0) }}</span>
         </div>
 
         <div v-else-if="shouldShowTime(index)" class="flex justify-center my-3">
-          <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-300'">{{ formatTime(message.timestamp) }}</span>
+          <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-300'">{{ formatTime(message.timestamp || message.createdAt || 0) }}</span>
         </div>
 
+        <!-- AI消息样式 -->
         <div
+          v-if="isAiMessage(message)"
+          class="flex gap-3 mb-4 group"
+        >
+          <div
+            class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
+            :style="{ background: currentAssistant?.avatarColor || 'linear-gradient(135deg, #2563EB, #3B82F6)' }"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+              <circle cx="12" cy="8" r="2"/>
+            </svg>
+          </div>
+
+          <div class="flex flex-col max-w-[85%] min-w-0">
+            <div class="text-xs mb-1 ml-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+              {{ currentAssistant?.name || 'AI助手' }}
+            </div>
+
+            <!-- 消息内容：支持代码块和普通文本混合 -->
+            <div class="space-y-2">
+              <template v-for="(segment, segIndex) in getMessageSegments(message.content)" :key="segIndex">
+                <CodeBlock 
+                  v-if="segment.type === 'code'" 
+                  :code="segment.content" 
+                  :language="segment.language" 
+                />
+                <div
+                  v-else
+                  class="px-4 py-3 text-sm rounded-2xl rounded-bl-md"
+                  :class="isDark ? 'bg-[#262626] text-gray-100 shadow-sm' : 'bg-[#F4F4F5] text-gray-800 shadow-sm'"
+                  v-html="renderInlineMarkdown(segment.content)"
+                />
+              </template>
+            </div>
+
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">
+                {{ formatTime(message.timestamp || message.createdAt || 0) }}
+              </span>
+              <button 
+                @click="copyMessage(message.content)"
+                class="text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer"
+                :class="isDark ? 'text-gray-500 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'"
+              >
+                复制
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 普通消息样式 -->
+        <div
+          v-else
           :class="[
             'flex gap-3 mb-4 bubble-pop',
-            String(message.senderId) === currentUserId ? 'flex-row-reverse' : 'flex-row'
+            isAiMode || String(message.senderId || '') === currentUserId ? 'flex-row-reverse' : 'flex-row'
           ]"
         >
           <div
             class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
-            :style="{ backgroundColor: getAvatarColor(String(message.senderId)) }"
+            :style="{ backgroundColor: getAvatarColor(String(message.senderId || '')) }"
           >
-            {{ getAvatarText(message.senderName) }}
+            {{ getAvatarText(message.senderName || '') }}
           </div>
 
-          <div :class="['flex flex-col max-w-[65%]', String(message.senderId) === currentUserId ? 'items-end' : 'items-start']">
-            <div v-if="String(message.senderId) !== currentUserId" class="text-xs mb-1 ml-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
-              {{ message.senderName }}
+          <div :class="['flex flex-col max-w-[65%]', isAiMode || String(message.senderId || '') === currentUserId ? 'items-end' : 'items-start']">
+            <div v-if="!isAiMode && String(message.senderId || '') !== currentUserId" class="text-xs mb-1 ml-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+              {{ message.senderName || '' }}
             </div>
 
             <div
               :class="[
                 'transition-all duration-200',
                 isImageMessage(message) ? 'px-1 py-1 rounded-2xl' : 'px-4 py-3 text-sm rounded-2xl',
-                String(message.senderId) === currentUserId
+                isAiMode || String(message.senderId || '') === currentUserId
                   ? 'bg-[#18181B] text-white shadow-md rounded-br-md'
                   : (isDark ? 'bg-gray-800 text-gray-100 shadow-sm rounded-bl-md' : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md')
               ]"
@@ -143,18 +292,65 @@ defineExpose({ scrollToBottom })
               </div>
               <div v-else class="leading-relaxed">{{ message.content }}</div>
             </div>
-
-            <div class="flex items-center gap-1 mt-1 text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">
-              <span>{{ formatTime(message.timestamp) }}</span>
-              <span v-if="String(message.senderId) === currentUserId" class="flex items-center">
-                <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-              </span>
-            </div>
           </div>
         </div>
       </template>
+
+      <!-- AI流式输出 -->
+      <div v-if="isAiMode && isStreaming && streamContent" class="flex gap-3 mb-4">
+        <div
+          class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
+          :style="{ background: currentAssistant?.avatarColor || 'linear-gradient(135deg, #2563EB, #3B82F6)' }"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+            <circle cx="12" cy="8" r="2"/>
+          </svg>
+        </div>
+        <div class="flex flex-col max-w-[85%] min-w-0">
+          <div class="text-xs mb-1 ml-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+            {{ currentAssistant?.name || 'AI助手' }}
+          </div>
+          <div class="space-y-2">
+            <template v-for="(segment, segIndex) in getMessageSegments(streamContent)" :key="segIndex">
+              <CodeBlock 
+                v-if="segment.type === 'code'" 
+                :code="segment.content" 
+                :language="segment.language" 
+              />
+              <div
+                v-else
+                class="px-4 py-3 text-sm rounded-2xl rounded-bl-md"
+                :class="isDark ? 'bg-[#262626] text-gray-100 shadow-sm' : 'bg-[#F4F4F5] text-gray-800 shadow-sm'"
+                v-html="renderInlineMarkdown(segment.content)"
+              />
+            </template>
+          </div>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-xs animate-pulse" :class="isDark ? 'text-blue-400' : 'text-blue-500'">输入中...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI加载状态 -->
+      <div v-if="isAiMode && isStreaming && !streamContent" class="flex gap-3 mb-4">
+        <div
+          class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
+          :style="{ background: currentAssistant?.avatarColor || 'linear-gradient(135deg, #2563EB, #3B82F6)' }"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+            <circle cx="12" cy="8" r="2"/>
+          </svg>
+        </div>
+        <div class="px-4 py-3 rounded-2xl rounded-bl-md" :class="isDark ? 'bg-[#262626]' : 'bg-[#F4F4F5] shadow-sm'">
+          <div class="flex gap-1.5">
+            <div class="w-2 h-2 rounded-full animate-bounce" :class="isDark ? 'bg-gray-500' : 'bg-gray-400'" style="animation-delay: 0ms"></div>
+            <div class="w-2 h-2 rounded-full animate-bounce" :class="isDark ? 'bg-gray-500' : 'bg-gray-400'" style="animation-delay: 150ms"></div>
+            <div class="w-2 h-2 rounded-full animate-bounce" :class="isDark ? 'bg-gray-500' : 'bg-gray-400'" style="animation-delay: 300ms"></div>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>

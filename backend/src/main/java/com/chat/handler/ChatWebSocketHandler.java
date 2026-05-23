@@ -3,10 +3,16 @@ package com.chat.handler;
 import com.chat.entity.Message;
 import com.chat.entity.Room;
 import com.chat.entity.User;
+import com.chat.entity.AiAssistant;
+import com.chat.entity.AiConversation;
+import com.chat.entity.AiMessage;
 import com.chat.properties.LocalProperties;
 import com.chat.service.MessageService;
 import com.chat.service.RoomService;
 import com.chat.service.UserService;
+import com.chat.service.AiAssistantService;
+import com.chat.service.AiConversationService;
+import com.chat.service.AiChatService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +47,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private MessageService messageService;
+
+    @Autowired
+    private AiAssistantService aiAssistantService;
+
+    @Autowired
+    private AiConversationService aiConversationService;
+
+    @Autowired
+    private AiChatService aiChatService;
 
     @Autowired
     private LocalProperties localProperties;
@@ -129,6 +144,21 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 break;
             case "message:read":
                 handleMessageRead(session, event.getData());
+                break;
+            case "ai:chat":
+                handleAiChat(session, event.getData());
+                break;
+            case "ai:conversation:list":
+                handleAiConversationList(session, event.getData());
+                break;
+            case "ai:conversation:create":
+                handleAiConversationCreate(session, event.getData());
+                break;
+            case "ai:conversation:delete":
+                handleAiConversationDelete(session, event.getData());
+                break;
+            case "ai:history":
+                handleAiHistory(session, event.getData());
                 break;
         }
     }
@@ -751,6 +781,140 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 logger.error("关闭被封禁用户连接失败: {}", e.getMessage());
             }
         }
+    }
+
+    // AI相关事件处理
+    private void handleAiChat(WebSocketSession session, Map<String, Object> data) {
+        Long userId = sessionUserMap.get(session.getId());
+        if (userId == null) {
+            sendToSession(session.getId(), new Event("ai:chat:error", Map.of("message", "未登录")));
+            return;
+        }
+
+        Long assistantId = parseLongId(data.get("assistantId"));
+        Long conversationId = parseLongId(data.get("conversationId"));
+        String content = (String) data.get("content");
+
+        if (content == null || content.trim().isEmpty()) {
+            sendToSession(session.getId(), new Event("ai:chat:error", Map.of("message", "消息不能为空")));
+            return;
+        }
+
+        try {
+            if (conversationId == null) {
+                AiConversation conversation = aiConversationService.createConversation(userId, assistantId, 
+                    content.length() > 20 ? content.substring(0, 20) : content);
+                conversationId = conversation.getId();
+                
+                sendToSession(session.getId(), new Event("ai:conversation:created", Map.of(
+                    "conversation", conversation
+                )));
+            }
+
+            final Long convId = conversationId;
+            
+            aiChatService.streamChat(assistantId, conversationId, content,
+                token -> {
+                    try {
+                        sendToSession(session.getId(), new Event("ai:chat:stream", Map.of(
+                            "conversationId", String.valueOf(convId),
+                            "token", token,
+                            "done", false
+                        )));
+                    } catch (Exception e) {
+                        logger.error("发送AI流式token失败: {}", e.getMessage());
+                    }
+                },
+                completeContent -> {
+                    try {
+                        sendToSession(session.getId(), new Event("ai:chat:stream", Map.of(
+                            "conversationId", String.valueOf(convId),
+                            "token", "",
+                            "done", true
+                        )));
+                        
+                        // 发送完成事件，包含完整消息
+                        AiMessage savedMessage = aiChatService.saveAssistantMessage(convId, completeContent, null);
+                        sendToSession(session.getId(), new Event("ai:chat:complete", Map.of(
+                            "id", String.valueOf(savedMessage.getId()),
+                            "conversationId", String.valueOf(convId),
+                            "role", "assistant",
+                            "content", completeContent,
+                            "createdAt", savedMessage.getCreatedAt()
+                        )));
+                    } catch (Exception e) {
+                        logger.error("发送AI完成事件失败: {}", e.getMessage());
+                    }
+                },
+                error -> {
+                    try {
+                        sendToSession(session.getId(), new Event("ai:chat:error", Map.of("message", error)));
+                    } catch (Exception e) {
+                        logger.error("发送AI错误事件失败: {}", e.getMessage());
+                    }
+                }
+            );
+        } catch (Exception e) {
+            logger.error("处理AI聊天失败: {}", e.getMessage());
+            sendToSession(session.getId(), new Event("ai:chat:error", Map.of("message", "处理失败: " + e.getMessage())));
+        }
+    }
+
+    private void handleAiConversationList(WebSocketSession session, Map<String, Object> data) {
+        Long userId = sessionUserMap.get(session.getId());
+        if (userId == null) {
+            return;
+        }
+
+        Long assistantId = parseLongId(data.get("assistantId"));
+        List<AiConversation> conversations;
+        
+        if (assistantId != null) {
+            conversations = aiConversationService.getUserConversations(userId, assistantId);
+        } else {
+            conversations = aiConversationService.getUserAllConversations(userId);
+        }
+
+        sendToSession(session.getId(), new Event("ai:conversation:list", Map.of(
+            "conversations", conversations
+        )));
+    }
+
+    private void handleAiConversationCreate(WebSocketSession session, Map<String, Object> data) {
+        Long userId = sessionUserMap.get(session.getId());
+        if (userId == null) {
+            return;
+        }
+
+        Long assistantId = parseLongId(data.get("assistantId"));
+        String title = (String) data.get("title");
+
+        AiConversation conversation = aiConversationService.createConversation(userId, assistantId, title);
+
+        sendToSession(session.getId(), new Event("ai:conversation:created", Map.of(
+            "conversation", conversation
+        )));
+    }
+
+    private void handleAiConversationDelete(WebSocketSession session, Map<String, Object> data) {
+        Long conversationId = parseLongId(data.get("conversationId"));
+        if (conversationId != null) {
+            aiConversationService.deleteConversation(conversationId);
+        }
+    }
+
+    private void handleAiHistory(WebSocketSession session, Map<String, Object> data) {
+        Long conversationId = parseLongId(data.get("conversationId"));
+        if (conversationId == null) {
+            return;
+        }
+
+        List<AiMessage> messages = aiChatService.getConversationMessages(conversationId);
+
+        sendToSession(session.getId(), new Event("ai:history", Map.of(
+            "conversationId", String.valueOf(conversationId),
+            "messages", messages
+        )));
     }
 
     // 数据模型类

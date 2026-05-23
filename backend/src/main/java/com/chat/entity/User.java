@@ -19,6 +19,9 @@ public class User {
     @Column(name = "avatar_color", length = 7)
     private String avatarColor;
 
+    @Column(name = "avatar_url", length = 512)
+    private String avatarUrl;
+
     @Column(name = "created_at", nullable = false)
     private Long createdAt;
 
@@ -67,6 +70,14 @@ public class User {
 
     public void setAvatarColor(String avatarColor) {
         this.avatarColor = avatarColor;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 
     public Long getCreatedAt() {

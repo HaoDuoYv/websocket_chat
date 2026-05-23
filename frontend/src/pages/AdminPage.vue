@@ -393,7 +393,17 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- 快捷入口 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="p-4 rounded-lg cursor-pointer transition-all hover:scale-105" :class="isDarkTheme ? 'bg-[#27272A] hover:bg-[#3F3F46]' : 'bg-white border border-gray-200 hover:shadow-md'" @click="router.push('/admin/ai')">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-lg flex items-center justify-center text-2xl" style="background: linear-gradient(135deg, #667eea, #764ba2)">🤖</div>
+              <div>
+                <p class="font-medium" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">AI助手配置</p>
+                <p class="text-xs" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">配置系统AI</p>
+              </div>
+            </div>
+          </div>
           <div class="p-4 rounded-lg" :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white border border-gray-200'">
             <p class="text-sm" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">在线用户</p>
             <p class="text-2xl font-semibold mt-1" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">{{ onlineCount }}</p>
