@@ -27,6 +27,7 @@ interface AiAssistant {
   id: string
   name: string
   avatarColor?: string
+  avatarUrl?: string
 }
 
 interface ContentSegment {
@@ -204,7 +205,13 @@ defineExpose({ scrollToBottom })
           v-if="isAiMessage(message)"
           class="flex gap-3 mb-4 group"
         >
+          <img
+            v-if="currentAssistant?.avatarUrl"
+            :src="currentAssistant.avatarUrl"
+            class="w-8 h-8 flex-shrink-0 rounded-full object-cover shadow-sm"
+          />
           <div
+            v-else
             class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
             :style="{ background: currentAssistant?.avatarColor || 'linear-gradient(135deg, #2563EB, #3B82F6)' }"
           >
@@ -298,7 +305,13 @@ defineExpose({ scrollToBottom })
 
       <!-- AI流式输出 -->
       <div v-if="isAiMode && isStreaming && streamContent" class="flex gap-3 mb-4">
+        <img
+          v-if="currentAssistant?.avatarUrl"
+          :src="currentAssistant.avatarUrl"
+          class="w-8 h-8 flex-shrink-0 rounded-full object-cover shadow-sm"
+        />
         <div
+          v-else
           class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
           :style="{ background: currentAssistant?.avatarColor || 'linear-gradient(135deg, #2563EB, #3B82F6)' }"
         >
@@ -334,7 +347,13 @@ defineExpose({ scrollToBottom })
 
       <!-- AI加载状态 -->
       <div v-if="isAiMode && isStreaming && !streamContent" class="flex gap-3 mb-4">
+        <img
+          v-if="currentAssistant?.avatarUrl"
+          :src="currentAssistant.avatarUrl"
+          class="w-8 h-8 flex-shrink-0 rounded-full object-cover shadow-sm"
+        />
         <div
+          v-else
           class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
           :style="{ background: currentAssistant?.avatarColor || 'linear-gradient(135deg, #2563EB, #3B82F6)' }"
         >

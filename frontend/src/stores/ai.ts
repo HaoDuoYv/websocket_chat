@@ -6,6 +6,7 @@ export interface AiAssistant {
   name: string
   avatarIcon?: string
   avatarColor?: string
+  avatarUrl?: string
   systemPrompt?: string
   baseUrl?: string
   apiKey?: string
@@ -87,15 +88,15 @@ export const useAiStore = defineStore('ai', () => {
     // Update in userAssistants
     const index = userAssistants.value.findIndex(a => a.id === assistantId)
     if (index >= 0) {
-      userAssistants.value[index] = { ...userAssistants.value[index], avatarUrl } as any
+      userAssistants.value[index] = { ...userAssistants.value[index], avatarUrl }
     }
     // Update currentAssistant if it's the same
     if (currentAssistant.value?.id === assistantId) {
-      currentAssistant.value = { ...currentAssistant.value, avatarUrl } as any
+      currentAssistant.value = { ...currentAssistant.value, avatarUrl }
     }
     // Update systemAssistant if it's the same
     if (systemAssistant.value?.id === assistantId) {
-      systemAssistant.value = { ...systemAssistant.value, avatarUrl } as any
+      systemAssistant.value = { ...systemAssistant.value, avatarUrl }
     }
   }
 
