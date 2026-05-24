@@ -102,12 +102,8 @@
                 <input 
                   v-model="form.baseUrl"
                   placeholder="https://api.openai.com/v1"
-                  :readonly="selectedProvider !== 'custom'"
                   class="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                  :class="[
-                    isDarkTheme ? 'bg-[#18181b] border-gray-800 text-gray-200 placeholder-gray-600' : 'bg-white border-gray-200 placeholder-gray-400',
-                    selectedProvider !== 'custom' ? 'opacity-70' : ''
-                  ]"
+                  :class="isDarkTheme ? 'bg-[#18181b] border-gray-800 text-gray-200 placeholder-gray-600' : 'bg-white border-gray-200 placeholder-gray-400'"
                 />
               </div>
 
@@ -127,13 +123,9 @@
                   <label class="block text-xs font-medium mb-1.5" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">模型</label>
                   <input 
                     v-model="form.model"
-                    :readonly="selectedProvider !== 'custom'"
                     placeholder="输入或选择模型"
                     class="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                    :class="[
-                      isDarkTheme ? 'bg-[#18181b] border-gray-800 text-gray-200 placeholder-gray-600' : 'bg-white border-gray-200 placeholder-gray-400',
-                      selectedProvider !== 'custom' ? 'opacity-70' : ''
-                    ]"
+                    :class="isDarkTheme ? 'bg-[#18181b] border-gray-800 text-gray-200 placeholder-gray-600' : 'bg-white border-gray-200 placeholder-gray-400'"
                   />
                 </div>
                 <div>

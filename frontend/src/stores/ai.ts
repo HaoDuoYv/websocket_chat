@@ -172,6 +172,17 @@ export const useAiStore = defineStore('ai', () => {
     isTyping.value = typing
   }
 
+  function clearChatState() {
+    currentConversation.value = null
+    conversations.value = []
+    messages.value = []
+    isStreaming.value = false
+    streamContent.value = ''
+    error.value = null
+    isTyping.value = false
+    isStreamDone.value = false
+  }
+
   function reset() {
     systemAssistant.value = null
     userAssistants.value = []
@@ -218,6 +229,7 @@ export const useAiStore = defineStore('ai', () => {
     setError,
     clearError,
     setTyping,
+    clearChatState,
     reset
   }
 })

@@ -9,7 +9,7 @@ export interface AvatarUploadResponse {
 }
 
 export const uploadUserAvatar = async (
-  userId: number,
+  userId: string,
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<AvatarUploadResponse> => {

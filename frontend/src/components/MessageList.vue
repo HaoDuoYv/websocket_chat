@@ -42,6 +42,7 @@ const props = defineProps<{
   isDark: boolean
   isAiMode?: boolean
   currentAssistant?: AiAssistant | null
+  currentUserAvatar?: string
   isStreaming?: boolean
   streamContent?: string
 }>()
@@ -266,7 +267,13 @@ defineExpose({ scrollToBottom })
             isAiMode || String(message.senderId || '') === currentUserId ? 'flex-row-reverse' : 'flex-row'
           ]"
         >
+          <img
+            v-if="(isAiMode || String(message.senderId || '') === currentUserId) && currentUserAvatar"
+            :src="currentUserAvatar"
+            class="w-8 h-8 flex-shrink-0 rounded-full object-cover shadow-sm"
+          />
           <div
+            v-else
             class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
             :style="{ backgroundColor: getAvatarColor(String(message.senderId || '')) }"
           >

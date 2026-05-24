@@ -82,6 +82,26 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String clientIp = getClientIp(session);
         logger.info("WebSocket 连接建立 - Session ID: {}, IP 地址: {}", session.getId(), clientIp);
+
+        Long userId = (Long) session.getAttributes().get("userId");
+        if (userId != null) {
+            String existingSessionId = userSessionMap.get(userId);
+            if (existingSessionId != null && !existingSessionId.equals(session.getId())) {
+                WebSocketSession existingSession = sessions.get(existingSessionId);
+                if (existingSession != null && existingSession.isOpen()) {
+                    try {
+                        Event kickedEvent = new Event("kicked", Map.of("message", "您的账号在其他设备登录"));
+                        existingSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(kickedEvent)));
+                        existingSession.close();
+                    } catch (Exception e) {
+                        logger.warn("关闭旧会话失败: {}", e.getMessage());
+                    }
+                    sessions.remove(existingSessionId);
+                    sessionUserMap.remove(existingSessionId);
+                    userSessionMap.remove(userId);
+                }
+            }
+        }
     }
 
     private String getClientIp(WebSocketSession session) {
@@ -189,8 +209,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleUserJoin(WebSocketSession session, Map<String, Object> data) throws IOException {
-        Long userId = parseLongId(data.get("userId"));
-        String username = (String) data.get("username");
+        Long userId = (Long) session.getAttributes().get("userId");
+        String username = (String) session.getAttributes().get("username");
+        if (userId == null) {
+            userId = parseLongId(data.get("userId"));
+            username = (String) data.get("username");
+        }
         String clientIp = getClientIp(session);
 
         logger.info("用户加入 - 用户名: {}, userId: {}, IP 地址: {}, Session ID: {}",

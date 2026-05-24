@@ -37,6 +37,9 @@ public class User {
     @Column(name = "banned_reason", length = 255)
     private String bannedReason;
 
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion = 0;
+
     public User() {
     }
 
@@ -118,5 +121,13 @@ public class User {
 
     public void setBannedReason(String bannedReason) {
         this.bannedReason = bannedReason;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public void setTokenVersion(int tokenVersion) {
+        this.tokenVersion = tokenVersion;
     }
 }

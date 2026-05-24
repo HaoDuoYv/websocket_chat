@@ -87,8 +87,8 @@
           </button>
           <div class="flex items-center gap-3 cursor-pointer" @click="isAvatarDialogOpen = true">
             <img 
-              v-if="(currentAssistant as any)?.avatarUrl" 
-              :src="(currentAssistant as any).avatarUrl" 
+              v-if="currentAssistant?.avatarUrl" 
+              :src="currentAssistant.avatarUrl" 
               class="w-10 h-10 rounded-full object-cover"
             />
             <div 
@@ -147,6 +147,7 @@
         :is-dark="isDarkTheme"
         :is-ai-mode="true"
         :current-assistant="currentAssistant"
+        :current-user-avatar="currentUserAvatar"
         :is-streaming="isStreaming"
         :stream-content="streamContent"
       />
@@ -223,7 +224,7 @@
             <div class="flex flex-col items-center gap-4">
               <AvatarUpload
                 ref="avatarUploadRef"
-                :model-value="(currentAssistant as any)?.avatarUrl"
+                :model-value="currentAssistant?.avatarUrl"
                 :default-icon="currentAssistant?.avatarIcon || '✨'"
                 :default-color="currentAssistant?.avatarColor"
                 size="xl"
@@ -283,6 +284,16 @@ const messages = computed(() => aiStore.messages)
 const isStreaming = computed(() => aiStore.isStreaming)
 const streamContent = computed(() => aiStore.streamContent)
 const error = computed(() => aiStore.error)
+const currentUserAvatar = computed(() => {
+  try {
+    const userData = localStorage.getItem('user')
+    if (userData) {
+      const user = JSON.parse(userData)
+      return user.avatarUrl || ''
+    }
+  } catch {}
+  return ''
+})
 
 const inputMessage = ref('')
 const contextSize = ref(10)
@@ -306,7 +317,7 @@ function autoResize() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   const userData = localStorage.getItem('user')
   if (!userData) {
     router.push('/login')
@@ -317,13 +328,40 @@ onMounted(() => {
   connect(user)
   
   if (assistantId.value) {
+    // 清除之前的聊天状态
+    aiStore.clearChatState()
     loadAiConversations(assistantId.value)
+    // 加载助手详情（如果当前store中没有或ID不匹配）
+    if (!currentAssistant.value || currentAssistant.value.id !== assistantId.value) {
+      try {
+        const resp = await fetch(`/api/ai/assistants/${assistantId.value}`)
+        if (resp.ok) {
+          const assistant = await resp.json()
+          aiStore.setCurrentAssistant(assistant)
+        }
+      } catch (e) {
+        console.error('加载AI助手详情失败:', e)
+      }
+    }
   }
 })
 
-watch(() => assistantId.value, (id) => {
+watch(() => assistantId.value, async (id) => {
   if (id) {
+    // 切换助手时清除聊天状态
+    aiStore.clearChatState()
     loadAiConversations(id)
+    if (!currentAssistant.value || currentAssistant.value.id !== id) {
+      try {
+        const resp = await fetch(`/api/ai/assistants/${id}`)
+        if (resp.ok) {
+          const assistant = await resp.json()
+          aiStore.setCurrentAssistant(assistant)
+        }
+      } catch (e) {
+        console.error('加载AI助手详情失败:', e)
+      }
+    }
   }
 })
 

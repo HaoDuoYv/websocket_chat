@@ -1,6 +1,6 @@
 # WebSocket 即时聊天系统
 
-一个基于 WebSocket 的实时聊天应用，支持私聊、群聊、文件传输、表情包、用户备注和管理员后台等功能。
+一个基于 WebSocket 的即时通讯与协作平台，支持私聊群聊、AI助手、协作编辑、五子棋对弈、文件传输、表情包、用户备注和管理员后台等功能。
 
 ## 功能特性
 
@@ -35,6 +35,26 @@
 - **IP 白名单**：管理后台仅限授权 IP 访问
 - **会话保护**：管理员接口需同时通过 IP 白名单和会话认证
 
+### AI 助手
+- **智能体创建**：创建专属 AI 智能体，自定义角色与提示词
+- **多模型对话**：支持多种大语言模型，灵活切换
+- **对话管理**：独立的 AI 对话界面，历史记录保存
+
+### 协作编辑
+- **实时协作**：基于 Yjs CRDT 的多人实时代码编辑
+- **代码高亮**：CodeMirror 6 驱动，支持语法高亮
+- **前端预览**：内置 HTML/CSS/JS 实时预览
+
+### 五子棋对弈
+- **在线对弈**：基于 WebSocket 的实时五子棋对战
+- **倒计时机制**：每步限时，超时判负
+- **胜负判定**：自动检测五连珠，即时公布结果
+
+### 应用中心
+- **应用集成**：集成外部应用，统一入口访问
+- **一键跳转**：支持内部路由和外部链接
+- **应用详情**：展示技术栈、使用场景等详细信息
+
 ## 技术栈
 
 ### 后端
@@ -54,6 +74,8 @@
 - **Vue Router** - 路由管理
 - **Pinia** - 状态管理
 - **Axios** - HTTP 客户端
+- **Yjs** - 实时协作 CRDT 框架
+- **CodeMirror 6** - 代码编辑器
 
 ### 部署
 - **Nginx** - 反向代理和静态资源服务
@@ -69,6 +91,8 @@ websocket_chat/
 │   │   │   ├── file.ts          # 文件上传接口
 │   │   │   └── userRemark.ts    # 用户备注接口
 │   │   ├── components/          # Vue 组件
+│   │   │   ├── AdminAiConfig.vue   # AI配置组件
+│   │   │   ├── AppDetailModal.vue  # 应用详情弹窗
 │   │   │   ├── ConfirmDialog.vue
 │   │   │   ├── CreateGroupDialog.vue
 │   │   │   ├── FileMessage.vue
@@ -78,10 +102,20 @@ websocket_chat/
 │   │   │   └── SetRemarkDialog.vue
 │   │   ├── composables/         # 组合式函数
 │   │   │   └── useWebSocket.ts  # WebSocket 客户端
+│   │   ├── config/              # 配置文件
+│   │   │   ├── apps.ts          # 应用中心配置
+│   │   │   ├── emojis.ts        # 表情包配置
+│   │   │   └── llmProviders.ts  # LLM 供应商配置
 │   │   ├── pages/               # 页面组件
 │   │   │   ├── AdminPage.vue    # 管理员页面
+│   │   │   ├── AiManagePage.vue # AI助手管理页面
+│   │   │   ├── AppsPage.vue     # 应用中心页面
 │   │   │   ├── ChatPage.vue     # 聊天页面
-│   │   │   └── HomePage.vue     # 首页
+│   │   │   ├── EditorPage.vue   # 协作编辑器页面
+│   │   │   ├── GomokuGamePage.vue  # 五子棋对局页面
+│   │   │   ├── GomokuLobbyPage.vue # 五子棋大厅页面
+│   │   │   ├── HomePage.vue     # 聊天首页
+│   │   │   └── LandingPage.vue  # 落地页
 │   │   ├── router/              # 路由配置
 │   │   │   └── index.ts
 │   │   ├── App.vue              # 根组件

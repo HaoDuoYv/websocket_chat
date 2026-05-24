@@ -75,10 +75,10 @@ const particles = Array.from({ length: 30 }, (_, i) => ({
 
 // --- Stats data ---
 const stats = [
-  { value: '6+', label: '核心功能' },
+  { value: '8+', label: '核心功能' },
   { value: '100%', label: '实时同步' },
   { value: '<50ms', label: '消息延迟' },
-  { value: '0', label: '外部依赖' },
+  { value: '500MB', label: '文件上限' },
 ]
 
 // --- Features (Bento grid) ---
@@ -86,14 +86,14 @@ const features = [
   {
     icon: `<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>`,
     title: '即时通讯',
-    desc: '私聊与群聊，消息实时推送，已读状态追踪',
+    desc: '私聊与群聊、300+表情包、在线状态、用户备注',
     span: 'lg:col-span-2 lg:row-span-1',
     accent: 'from-indigo-500/20 to-blue-500/20',
   },
   {
     icon: `<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`,
     title: '文件传输',
-    desc: '拖拽上传，图片与文档即时预览',
+    desc: '拖拽上传，图片与文档即时预览，最大500MB',
     span: 'lg:col-span-1 lg:row-span-2',
     accent: 'from-emerald-500/20 to-teal-500/20',
   },
@@ -112,11 +112,11 @@ const features = [
     accent: 'from-amber-500/20 to-orange-500/20',
   },
   {
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>`,
-    title: '安全认证',
-    desc: '用户认证与管理员后台',
-    span: 'lg:col-span-1 lg:row-span-1',
-    accent: 'from-rose-500/20 to-pink-500/20',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`,
+    title: 'AI 助手',
+    desc: '创建专属AI智能体，多模型对话，自定义角色',
+    span: 'lg:col-span-2 lg:row-span-1',
+    accent: 'from-blue-500/20 to-sky-500/20',
   },
   {
     icon: `<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>`,
@@ -124,6 +124,20 @@ const features = [
     desc: '集成外部应用，一键访问',
     span: 'lg:col-span-1 lg:row-span-1',
     accent: 'from-cyan-500/20 to-sky-500/20',
+  },
+  {
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>`,
+    title: '管理后台',
+    desc: '用户管理、系统监控、IP白名单',
+    span: 'lg:col-span-1 lg:row-span-1',
+    accent: 'from-rose-500/20 to-pink-500/20',
+  },
+  {
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`,
+    title: '双主题模式',
+    desc: '亮色/暗色主题自由切换，响应式设计',
+    span: 'lg:col-span-1 lg:row-span-1',
+    accent: 'from-zinc-500/20 to-gray-500/20',
   },
 ]
 
@@ -136,7 +150,9 @@ const techStack = [
   { name: 'Tailwind CSS', color: 'text-cyan-400' },
   { name: 'Pinia', color: 'text-amber-400' },
   { name: 'Vite', color: 'text-violet-400' },
-  { name: 'CodeMirror', color: 'text-rose-400' },
+  { name: 'Yjs', color: 'text-rose-400' },
+  { name: 'SQLite', color: 'text-sky-400' },
+  { name: 'Snowflake ID', color: 'text-orange-400' },
 ]
 
 // --- Nav links ---
@@ -281,7 +297,7 @@ const parallaxStyle = computed(() => ({
           :class="heroVisible ? 'opacity-100' : 'opacity-0'"
           style="transition: opacity 0.6s ease-out 1s"
         >
-          私聊、群聊、文件传输、五子棋对弈、实时协作编辑 — 一站式体验
+          私聊群聊、AI助手、协作编辑、五子棋对弈 — 一站式即时通讯与协作平台
         </p>
 
         <!-- CTA Buttons -->
@@ -358,7 +374,7 @@ const parallaxStyle = computed(() => ({
           </p>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5 auto-rows-[180px]">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5 auto-rows-[180px]">
           <div
             v-for="(feature, index) in features"
             :key="feature.title"

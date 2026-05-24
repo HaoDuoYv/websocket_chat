@@ -54,6 +54,18 @@
           </div>
 
           <div v-if="enabled" class="pt-4 space-y-4">
+            <!-- 头像上传 -->
+            <div class="flex justify-center mb-4">
+              <AvatarUpload
+                ref="avatarUploadRef"
+                :model-value="form.avatarUrl"
+                default-icon="🤖"
+                size="lg"
+                hint="点击上传系统助手头像"
+                @upload="handleAvatarUpload"
+              />
+            </div>
+
             <!-- 基本信息 -->
             <div class="grid grid-cols-2 gap-4">
               <div>
@@ -219,13 +231,19 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getProviderOptions, getPresetByProvider } from '@/config/llmProviders'
+import AvatarUpload from './AvatarUpload.vue'
+import { uploadAiAvatar } from '@/api/avatar'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
+const toast = useToast()
 const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 const enabled = ref(false)
 const showKey = ref(false)
 const testResult = ref<{ success: boolean; message: string } | null>(null)
 const selectedProvider = ref('openai')
+const avatarUploadRef = ref<InstanceType<typeof AvatarUpload> | null>(null)
+const systemAssistantId = ref<string | null>(null)
 
 const providerOptions = getProviderOptions()
 
@@ -238,7 +256,8 @@ const form = reactive({
   model: 'gpt-4o',
   temperature: 0.7,
   maxContext: 20,
-  maxTokens: 4096
+  maxTokens: 4096,
+  avatarUrl: ''
 })
 
 watch(selectedProvider, (provider) => {
@@ -260,6 +279,7 @@ async function loadConfig() {
     enabled.value = data.enabled
     if (data.config) {
       Object.assign(form, data.config)
+      systemAssistantId.value = data.config.id || null
       // 检测供应商
       const detectedProvider = detectProvider(form.baseUrl)
       if (detectedProvider) {
@@ -280,6 +300,28 @@ function detectProvider(baseUrl: string): string {
     }
   }
   return 'custom'
+}
+
+async function handleAvatarUpload(file: File) {
+  if (!systemAssistantId.value) {
+    toast.error('请先保存配置后再上传头像')
+    return
+  }
+  
+  try {
+    const response = await uploadAiAvatar(systemAssistantId.value, file, (progress) => {
+      avatarUploadRef.value?.setProgress(progress)
+    })
+    
+    if (response.success) {
+      form.avatarUrl = response.url
+      toast.success('头像上传成功')
+    } else {
+      toast.error(response.message || '头像上传失败')
+    }
+  } catch (error: any) {
+    toast.error(error?.message || '头像上传失败')
+  }
 }
 
 async function saveConfig() {

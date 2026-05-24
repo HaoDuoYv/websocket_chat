@@ -1,5 +1,6 @@
 package com.chat.config;
 
+import com.chat.interceptor.WebSocketAuthInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
@@ -15,19 +16,28 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final ChatWebSocketHandler chatWebSocketHandler;
     private final GomokuWebSocketHandler gomokuWebSocketHandler;
     private final EditorWebSocketHandler editorWebSocketHandler;
+    private final WebSocketAuthInterceptor webSocketAuthInterceptor;
 
     public WebSocketConfig(ChatWebSocketHandler chatWebSocketHandler,
                           GomokuWebSocketHandler gomokuWebSocketHandler,
-                          EditorWebSocketHandler editorWebSocketHandler) {
+                          EditorWebSocketHandler editorWebSocketHandler,
+                          WebSocketAuthInterceptor webSocketAuthInterceptor) {
         this.chatWebSocketHandler = chatWebSocketHandler;
         this.gomokuWebSocketHandler = gomokuWebSocketHandler;
         this.editorWebSocketHandler = editorWebSocketHandler;
+        this.webSocketAuthInterceptor = webSocketAuthInterceptor;
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(chatWebSocketHandler, "/ws/chat").setAllowedOrigins("*");
-        registry.addHandler(gomokuWebSocketHandler, "/ws/gomoku").setAllowedOrigins("*");
-        registry.addHandler(editorWebSocketHandler, "/ws/editor").setAllowedOrigins("*");
+        registry.addHandler(chatWebSocketHandler, "/ws/chat")
+                .addInterceptors(webSocketAuthInterceptor)
+                .setAllowedOrigins("*");
+        registry.addHandler(gomokuWebSocketHandler, "/ws/gomoku")
+                .addInterceptors(webSocketAuthInterceptor)
+                .setAllowedOrigins("*");
+        registry.addHandler(editorWebSocketHandler, "/ws/editor")
+                .addInterceptors(webSocketAuthInterceptor)
+                .setAllowedOrigins("*");
     }
 }

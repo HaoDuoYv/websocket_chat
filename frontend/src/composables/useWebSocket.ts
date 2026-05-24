@@ -26,6 +26,7 @@ let sharedSocket: WebSocket | null = null
 let currentUserId = ''
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let currentUser: User | null = null
+let currentToken = ''
 const MAX_RECONNECT_ATTEMPTS = 10
 const BASE_RECONNECT_DELAY = 1000
 
@@ -47,7 +48,7 @@ export function useWebSocket() {
     readReceipts
   } = storeToRefs(store)
 
-  const connect = (user: User) => {
+  const connect = (user: User, token?: string) => {
     // 如果已连接同一用户，直接复用
     if (sharedSocket && sharedSocket.readyState === WebSocket.OPEN && currentUserId === user.userId) {
       isConnected.value = true
@@ -59,6 +60,7 @@ export function useWebSocket() {
     }
     currentUserId = user.userId
     currentUser = user
+    if (token) currentToken = token
     store.reconnectAttempts = 0
     doConnect(user)
   }
@@ -69,7 +71,8 @@ export function useWebSocket() {
       reconnectTimer = null
     }
 
-    sharedSocket = new WebSocket('/ws/chat')
+    const wsUrl = currentToken ? `/ws/chat?token=${encodeURIComponent(currentToken)}` : '/ws/chat'
+    sharedSocket = new WebSocket(wsUrl)
 
     sharedSocket.onopen = () => {
       console.log('WebSocket connected')
@@ -246,6 +249,16 @@ export function useWebSocket() {
           message: event.data?.reason ? `账号已被封禁：${event.data.reason}` : '账号已被封禁'
         }
         disconnect()
+        break
+
+      case 'kicked':
+        localStorage.removeItem('user')
+        currentUser = null
+        currentToken = ''
+        sharedSocket?.close()
+        sharedSocket = null
+        isConnected.value = false
+        window.location.href = '/login'
         break
 
       case 'room:member:left':

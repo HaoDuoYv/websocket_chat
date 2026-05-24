@@ -1,18 +1,38 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const username = ref('')
+const password = ref('')
+const confirmPassword = ref('')
 const errorMsg = ref('')
 const isLoading = ref(false)
 const isRegisterMode = ref(false)
 
 const emit = defineEmits<{
-  login: [user: { userId: string; username: string }]
+  login: [user: { userId: string; username: string; token: string }]
 }>()
+
+const canSubmit = computed(() => {
+  if (!username.value.trim() || !password.value) return false
+  if (isRegisterMode.value && password.value !== confirmPassword.value) return false
+  return true
+})
 
 const handleSubmit = async () => {
   if (!username.value.trim()) {
     errorMsg.value = '请输入用户名'
+    return
+  }
+  if (!password.value) {
+    errorMsg.value = '请输入密码'
+    return
+  }
+  if (password.value.length < 6) {
+    errorMsg.value = '密码不能少于6位'
+    return
+  }
+  if (isRegisterMode.value && password.value !== confirmPassword.value) {
+    errorMsg.value = '两次密码输入不一致'
     return
   }
 
@@ -24,7 +44,7 @@ const handleSubmit = async () => {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.value.trim() })
+      body: JSON.stringify({ username: username.value.trim(), password: password.value })
     })
 
     const data = await res.json()
@@ -37,7 +57,8 @@ const handleSubmit = async () => {
     const user = {
       userId: String(data.userId),
       username: data.username,
-      avatarUrl: data.avatarUrl || ''
+      avatarUrl: data.avatarUrl || '',
+      token: data.token
     }
 
     localStorage.setItem('user', JSON.stringify(user))
@@ -53,6 +74,8 @@ const handleSubmit = async () => {
 const toggleMode = () => {
   isRegisterMode.value = !isRegisterMode.value
   errorMsg.value = ''
+  password.value = ''
+  confirmPassword.value = ''
 }
 </script>
 
@@ -87,7 +110,7 @@ const toggleMode = () => {
         </div>
 
         <form @submit.prevent="handleSubmit" class="space-y-5">
-          <!-- 用户名输入 - 极简下划线风格 -->
+          <!-- 用户名输入 -->
           <div>
             <label class="block text-xs font-medium text-[#525252] mb-2 uppercase tracking-wider">
               用户名
@@ -100,7 +123,39 @@ const toggleMode = () => {
               :disabled="isLoading"
               maxlength="32"
             />
-            <p class="text-xs text-[#A3A3A3] mt-2">用户名唯一，注册后不可更改</p>
+          </div>
+
+          <!-- 密码输入 -->
+          <div>
+            <label class="block text-xs font-medium text-[#525252] mb-2 uppercase tracking-wider">
+              密码
+            </label>
+            <input
+              v-model="password"
+              type="password"
+              placeholder="请输入密码（至少6位）"
+              class="w-full px-0 py-3 bg-transparent border-0 border-b border-[#E5E5E5] text-sm text-[#18181B] placeholder-[#A3A3A3] focus:outline-none focus:border-[#18181B] transition-all duration-200 input-glow"
+              :disabled="isLoading"
+              minlength="6"
+            />
+          </div>
+
+          <!-- 确认密码 (仅注册模式) -->
+          <div v-if="isRegisterMode">
+            <label class="block text-xs font-medium text-[#525252] mb-2 uppercase tracking-wider">
+              确认密码
+            </label>
+            <input
+              v-model="confirmPassword"
+              type="password"
+              placeholder="请再次输入密码"
+              class="w-full px-0 py-3 bg-transparent border-0 border-b border-[#E5E5E5] text-sm text-[#18181B] placeholder-[#A3A3A3] focus:outline-none focus:border-[#18181B] transition-all duration-200 input-glow"
+              :disabled="isLoading"
+              minlength="6"
+            />
+            <p v-if="confirmPassword && password !== confirmPassword" class="text-xs text-red-500 mt-1">
+              两次密码输入不一致
+            </p>
           </div>
 
           <!-- 错误提示 -->
@@ -117,7 +172,7 @@ const toggleMode = () => {
           <button
             type="submit"
             class="w-full py-3.5 bg-[#18181B] hover:bg-[#27272A] text-white text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl btn-press"
-            :disabled="isLoading || !username.trim()"
+            :disabled="isLoading || !canSubmit"
           >
             <span v-if="isLoading" class="flex items-center justify-center gap-2">
               <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">

@@ -24,11 +24,12 @@ const PROJECT_NOTICE_STORAGE_KEY = 'project-notice-dismissed'
 const ACTIVE_TAB_STORAGE_KEY = 'home-active-tab'
 const projectNotice = {
   title: '关于本项目',
-  summary: '这是一个基于 WebSocket 的即时聊天系统演示项目，适合学习实时通信、前后端分离与聊天场景设计。',
+  summary: '基于 WebSocket 的即时通讯与协作平台，支持私聊群聊、AI助手、协作编辑、五子棋对弈等功能。',
   highlights: [
-    '支持私聊、群聊、文件传输、表情消息与管理员后台。',
-    '前端使用 Vue 3 + TypeScript，后端基于 Spring Boot 与 WebSocket。',
-    '更适合用于学习、演示和局域网环境体验，不建议直接作为生产方案使用。'
+    '即时通讯：私聊、群聊、300+表情包、文件传输、在线状态、用户备注。',
+    '协作与娱乐：AI智能体对话、多人实时代码编辑、五子棋在线对弈、应用中心。',
+    '前端 Vue 3 + TypeScript，后端 Spring Boot + WebSocket，全栈开源。',
+    '适合学习实时通信、前后端分离与聊天场景设计，不建议直接用于生产环境。'
   ],
   links: [
     {
@@ -653,7 +654,7 @@ onMounted(() => {
   const userData = localStorage.getItem('user')
   if (userData) {
     user.value = JSON.parse(userData)
-    connect(user.value)
+    connect(user.value, user.value.token)
     loadUserRemarks(user.value.userId)
     startUserRemarkAutoRefresh()
     loadAiAssistants()
@@ -862,7 +863,7 @@ const handleAvatarUpload = async (file: File) => {
   
   try {
     const response = await uploadUserAvatar(
-      Number(user.value.userId),
+      user.value.userId,
       file,
       (progress) => {
         avatarUploadRef.value?.setProgress(progress)
@@ -889,7 +890,7 @@ const handleAvatarUpload = async (file: File) => {
 
 const handleLogin = (userData: any) => {
   user.value = userData
-  connect(userData)
+  connect(userData, userData.token)
   loadUserRemarks(userData.userId)
   startUserRemarkAutoRefresh()
 }
