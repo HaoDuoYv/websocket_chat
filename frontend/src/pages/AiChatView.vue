@@ -351,7 +351,7 @@ async function handleAvatarUpload(file: File) {
   
   try {
     const response = await uploadAiAvatar(
-      Number(currentAssistant.value.id),
+      currentAssistant.value.id,
       file,
       (progress) => {
         avatarUploadRef.value?.setProgress(progress)

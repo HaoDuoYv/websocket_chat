@@ -42,7 +42,7 @@ export const uploadUserAvatar = async (
 }
 
 export const uploadAiAvatar = async (
-  assistantId: number,
+  assistantId: string,
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<AvatarUploadResponse> => {
