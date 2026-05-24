@@ -291,7 +291,7 @@ async function handleAvatarUpload(file: File) {
     )
     
     if (response.success) {
-      form.avatarUrl = response.url
+      form.avatarUrl = response.url || ''
       toast.success('头像更新成功')
     } else {
       toast.error(response.message || '头像上传失败')

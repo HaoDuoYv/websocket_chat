@@ -8,15 +8,15 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * 本地文件上传工具类
- * 参考苍穹外卖项目实现
+ * 使用 SHA-256 内容哈希命名，自动去重
  */
 @Data
 @Slf4j
@@ -27,77 +27,109 @@ public class LocalUploadUtil {
 
     private LocalProperties localProperties;
 
-    /**
-     * 上传文件
-     *
-     * @param file 上传的文件
-     * @return 文件访问URL（相对路径，如 /files/20260412/uuid.jpg）
-     * @throws IOException IO异常
-     */
-    public String upload(MultipartFile file) throws IOException {
-        // 获取原始文件名并生成新文件名（UUID + 扩展名）
-        String originalFilename = file.getOriginalFilename();
-        String fileExtension = "";
-        if (originalFilename != null && originalFilename.lastIndexOf(".") != -1) {
-            fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
-        String filename = UUID.randomUUID() + fileExtension;
-
-        // 按日期创建子目录（如 20260412）
-        String dateDir = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-
-        // 将相对路径转换为绝对路径，基于项目工作目录
-        String absolutePath = System.getProperty("user.dir") + File.separator + localProperties.getLocalUrl();
-        File dir = new File(absolutePath, dateDir);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-
-        // 保存文件
-        File destFile = new File(dir, filename);
-        log.info("文件保存路径：{}", destFile.getAbsolutePath());
-        file.transferTo(destFile);
-
-        // 返回相对路径URL（如 /files/20260412/uuid.jpg）
-        return buildRelativeFileUrl(dateDir, filename);
-    }
-
-    /**
-     * 上传文件（带自定义子目录）
-     *
-     * @param file      上传的文件
-     * @param subDir    子目录名
-     * @param chatId    聊天ID
-     * @param senderId  发送者ID
-     * @return 文件访问URL
-     * @throws IOException IO异常
-     */
     public String uploadWithInfo(MultipartFile file, String subDir, String chatId, String senderId) throws IOException {
-        // 获取原始文件名并生成新文件名（UUID + 扩展名）
         String originalFilename = file.getOriginalFilename();
         String fileExtension = "";
         if (originalFilename != null && originalFilename.lastIndexOf(".") != -1) {
             fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
         }
-        String filename = UUID.randomUUID() + fileExtension;
 
-        // 使用指定的子目录或按日期创建
+        byte[] fileBytes = file.getBytes();
+        String contentHash = sha256(fileBytes);
+        String filename = contentHash + fileExtension;
+
         String targetDir = subDir != null ? subDir : LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
 
-        // 将相对路径转换为绝对路径
         String absolutePath = System.getProperty("user.dir") + File.separator + localProperties.getLocalUrl();
         File dir = new File(absolutePath, targetDir);
         if (!dir.exists()) {
             dir.mkdirs();
         }
 
-        // 保存文件
         File destFile = new File(dir, filename);
-        log.info("文件保存路径：{}，聊天ID：{}，发送者：{}", destFile.getAbsolutePath(), chatId, senderId);
-        file.transferTo(destFile);
+        if (!destFile.exists()) {
+            file.transferTo(destFile);
+            log.info("文件保存（新建）: {}", destFile.getAbsolutePath());
+        } else {
+            log.info("文件已存在，跳过写入: {}", destFile.getAbsolutePath());
+        }
 
-        // 返回相对路径URL
         return buildRelativeFileUrl(targetDir, filename);
+    }
+
+    public String uploadToTemp(MultipartFile file) throws IOException {
+        String originalFilename = file.getOriginalFilename();
+        String fileExtension = "";
+        if (originalFilename != null && originalFilename.lastIndexOf(".") != -1) {
+            fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+
+        byte[] fileBytes = file.getBytes();
+        String contentHash = sha256(fileBytes);
+        String filename = contentHash + fileExtension;
+
+        String absolutePath = System.getProperty("user.dir") + File.separator + localProperties.getLocalUrl();
+        File tempDir = new File(absolutePath, "temp");
+        if (!tempDir.exists()) {
+            tempDir.mkdirs();
+        }
+
+        File destFile = new File(tempDir, filename);
+        if (!destFile.exists()) {
+            file.transferTo(destFile);
+            log.info("临时文件保存: {}", destFile.getAbsolutePath());
+        }
+
+        return "temp/" + filename;
+    }
+
+    public String moveFromTemp(String tempRelativePath, String targetSubDir) throws IOException {
+        String absolutePath = System.getProperty("user.dir") + File.separator + localProperties.getLocalUrl();
+        String filename = tempRelativePath.substring(tempRelativePath.lastIndexOf('/') + 1);
+
+        File srcFile = new File(absolutePath, tempRelativePath);
+        File destDir = new File(absolutePath, targetSubDir);
+        if (!destDir.exists()) {
+            destDir.mkdirs();
+        }
+        File destFile = new File(destDir, filename);
+
+        if (srcFile.exists()) {
+            if (!destFile.exists()) {
+                srcFile.renameTo(destFile);
+                log.info("文件从temp移动到正式目录: {}", destFile.getAbsolutePath());
+            } else {
+                srcFile.delete();
+                log.info("正式目录已存在同名文件，删除temp文件");
+            }
+        }
+
+        return buildRelativeFileUrl(targetSubDir, filename);
+    }
+
+    public void deleteTempFile(String tempRelativePath) {
+        String absolutePath = System.getProperty("user.dir") + File.separator + localProperties.getLocalUrl();
+        File file = new File(absolutePath, tempRelativePath);
+        if (file.exists()) {
+            file.delete();
+            log.info("删除临时文件: {}", file.getAbsolutePath());
+        }
+    }
+
+    public void deleteFile(String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) return;
+        String absolutePath = System.getProperty("user.dir") + File.separator + localProperties.getLocalUrl();
+        String cleanPath = relativePath;
+        if (cleanPath.startsWith("/files/")) {
+            cleanPath = cleanPath.substring(7);
+        } else if (cleanPath.startsWith("files/")) {
+            cleanPath = cleanPath.substring(6);
+        }
+        File file = new File(absolutePath, cleanPath);
+        if (file.exists()) {
+            file.delete();
+            log.info("删除文件: {}", file.getAbsolutePath());
+        }
     }
 
     private String buildRelativeFileUrl(String directory, String filename) {
@@ -108,7 +140,6 @@ public class LocalUploadUtil {
         if (fileUrl == null || fileUrl.isBlank()) {
             return fileUrl;
         }
-
         int resolvedPort = serverPort > 0 ? serverPort : 8081;
         String normalizedPath = normalizeFileUrlPath(fileUrl, scheme, serverName, resolvedPort);
         StringBuilder builder = new StringBuilder();
@@ -127,7 +158,6 @@ public class LocalUploadUtil {
             String existingScheme = matcher.group(1);
             String existingHost = matcher.group(2);
             String existingPath = matcher.group(4);
-
             boolean sameHost = existingHost != null && existingHost.equalsIgnoreCase(serverName);
             boolean sameScheme = existingScheme != null && existingScheme.equalsIgnoreCase(scheme);
             if (sameHost && sameScheme) {
@@ -135,13 +165,25 @@ public class LocalUploadUtil {
             }
             return fileUrl;
         }
-
         if (fileUrl.startsWith("http//") || fileUrl.startsWith("https//")) {
             String fixedUrl = fileUrl.replaceFirst("^http//", "http://")
                     .replaceFirst("^https//", "https://");
             return normalizeFileUrlPath(fixedUrl, scheme, serverName, serverPort);
         }
-
         return fileUrl.startsWith("/") ? fileUrl : "/" + fileUrl;
+    }
+
+    private static String sha256(byte[] data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(data);
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
     }
 }

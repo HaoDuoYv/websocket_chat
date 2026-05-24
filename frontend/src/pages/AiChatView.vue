@@ -398,7 +398,7 @@ async function handleAvatarUpload(file: File) {
     
     if (response.success) {
       // Update assistant in store
-      aiStore.updateAssistantAvatar(currentAssistant.value.id, response.url)
+      aiStore.updateAssistantAvatar(currentAssistant.value.id, response.url || '')
       toast.success('头像更新成功')
       isAvatarDialogOpen.value = false
     } else {

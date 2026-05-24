@@ -2,24 +2,21 @@ package com.chat.service;
 
 import com.chat.entity.FileRecord;
 import com.chat.properties.LocalProperties;
+import com.chat.repository.FileRecordRepository;
 import com.chat.utils.LocalUploadUtil;
+import com.chat.utils.SnowflakeIdGenerator;
 import com.chat.vo.FileUploadResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.security.MessageDigest;
+import java.util.Optional;
 
-/**
- * 文件上传服务类
- * 使用 LocalUploadUtil 工具类处理文件上传
- * 参考苍穹外卖项目实现
- */
 @Service
 @Slf4j
 public class FileUploadService {
@@ -27,78 +24,79 @@ public class FileUploadService {
     @Autowired
     private LocalProperties localProperties;
 
+    @Autowired
+    private FileRecordRepository fileRecordRepository;
+
+    @Autowired
+    private SnowflakeIdGenerator idGenerator;
+
     @Value("${server.port:8081}")
     private int configuredServerPort;
 
-    // 内存中存储文件记录（实际项目中应该使用数据库）
-    private final Map<String, FileRecord> fileRecords = new ConcurrentHashMap<>();
-
-    /**
-     * 上传文件
-     *
-     * @param file     上传的文件
-     * @param chatId   聊天ID
-     * @param senderId 发送者ID
-     * @return 文件上传响应
-     * @throws IOException IO异常
-     */
-    public FileUploadResponse uploadFile(MultipartFile file, String chatId, String senderId, String scheme, String serverName, int serverPort) throws IOException {
-        // 生成文件ID
-        String fileId = UUID.randomUUID().toString();
+    @Transactional
+    public FileUploadResponse uploadFile(MultipartFile file, String chatId, String senderId,
+                                          String scheme, String serverName, int serverPort) throws IOException {
         String originalFilename = file.getOriginalFilename();
+        String contentType = file.getContentType();
+        long fileSize = file.getSize();
 
-        // 使用 LocalUploadUtil 上传文件
+        // 计算内容哈希
+        byte[] fileBytes = file.getBytes();
+        String contentHash = sha256(fileBytes);
+
+        // 检查是否已存在相同内容的文件
+        Optional<FileRecord> existing = fileRecordRepository.findByContentHash(contentHash);
+        if (existing.isPresent()) {
+            FileRecord record = existing.get();
+            record.setRefCount(record.getRefCount() + 1);
+            fileRecordRepository.save(record);
+            log.info("文件已存在（内容去重），引用计数+1: {}", record.getFileUrl());
+
+            FileUploadResponse response = new FileUploadResponse();
+            response.setSuccess(true);
+            response.setMessage("文件上传成功");
+            response.setFileId(record.getFileId());
+            response.setFileName(originalFilename);
+            response.setFileSize(fileSize);
+            response.setFileUrl(record.getFileUrl());
+            response.setFileType(contentType);
+            return response;
+        }
+
+        // 新文件：保存到磁盘
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
         String relativeFileUrl = uploadUtil.uploadWithInfo(file, null, chatId, senderId);
         int resolvedPort = resolveFilePort(serverPort);
         String fileUrl = uploadUtil.toAbsoluteFileUrl(relativeFileUrl, scheme, serverName, resolvedPort);
 
-        // 创建文件记录
-        FileRecord fileRecord = new FileRecord(
-                fileId,
-                file.getOriginalFilename(),
-                originalFilename,
-                null, // 不再存储绝对路径
-                fileUrl,
-                file.getSize(),
-                file.getContentType(),
-                chatId,
-                senderId);
+        // 保存文件记录到数据库
+        String fileId = String.valueOf(idGenerator.nextId());
+        FileRecord record = new FileRecord(fileId, contentHash, originalFilename, fileUrl, fileSize, contentType);
+        fileRecordRepository.save(record);
 
-        // 保存记录
-        fileRecords.put(fileId, fileRecord);
+        log.info("文件上传成功（新建）: fileId={}, hash={}", fileId, contentHash);
 
-        log.info("文件上传成功 - fileId: {}, 文件名: {}, 大小: {} bytes, URL: {}",
-                fileId, originalFilename, file.getSize(), fileUrl);
-
-        // 返回响应
         FileUploadResponse response = new FileUploadResponse();
         response.setSuccess(true);
         response.setMessage("文件上传成功");
         response.setFileId(fileId);
         response.setFileName(originalFilename);
-        response.setFileSize(file.getSize());
+        response.setFileSize(fileSize);
         response.setFileUrl(fileUrl);
-        response.setFileType(file.getContentType());
-
+        response.setFileType(contentType);
         return response;
     }
 
-    /**
-     * 获取文件信息
-     *
-     * @param fileId 文件ID
-     * @return 文件上传响应
-     */
+    @Transactional(readOnly = true)
     public FileUploadResponse getFileInfo(String fileId, jakarta.servlet.http.HttpServletRequest request) {
-        FileRecord record = fileRecords.get(fileId);
-        if (record == null) {
+        Optional<FileRecord> opt = fileRecordRepository.findById(fileId);
+        if (opt.isEmpty()) {
             FileUploadResponse response = new FileUploadResponse();
             response.setSuccess(false);
             response.setMessage("文件不存在");
             return response;
         }
-
+        FileRecord record = opt.get();
         FileUploadResponse response = new FileUploadResponse();
         response.setSuccess(true);
         response.setMessage("获取成功");
@@ -107,18 +105,15 @@ public class FileUploadService {
         response.setFileSize(record.getFileSize());
         response.setFileUrl(record.getFileUrl());
         response.setFileType(record.getFileType());
-
         return response;
     }
 
-    /**
-     * 获取文件记录
-     *
-     * @param fileId 文件ID
-     * @return 文件记录
-     */
-    public FileRecord getFileRecord(String fileId) {
-        return fileRecords.get(fileId);
+    @Transactional
+    public void decrementRefCount(String fileId) {
+        fileRecordRepository.findById(fileId).ifPresent(record -> {
+            record.setRefCount(record.getRefCount() - 1);
+            fileRecordRepository.save(record);
+        });
     }
 
     private int resolveFilePort(int requestPort) {
@@ -126,5 +121,19 @@ public class FileUploadService {
             return requestPort;
         }
         return configuredServerPort;
+    }
+
+    private static String sha256(byte[] data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(data);
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
     }
 }

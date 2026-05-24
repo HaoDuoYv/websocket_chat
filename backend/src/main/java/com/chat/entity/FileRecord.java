@@ -1,115 +1,75 @@
 package com.chat.entity;
 
-import java.time.LocalDateTime;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import jakarta.persistence.*;
 
+@Entity
+@Table(name = "file_records")
 public class FileRecord {
+
+    @Id
+    @Column(length = 64)
     private String fileId;
-    private String fileName;
+
+    @Column(name = "content_hash", nullable = false, length = 64)
+    private String contentHash;
+
+    @Column(name = "original_file_name", length = 255)
     private String originalFileName;
-    private String filePath;
+
+    @Column(name = "file_url", length = 512)
     private String fileUrl;
-    private long fileSize;
+
+    @Column(name = "file_size", nullable = false)
+    private Long fileSize;
+
+    @Column(name = "file_type", length = 128)
     private String fileType;
-    private String chatId;
-    private String senderId;
-    private LocalDateTime uploadTime;
+
+    @Column(name = "ref_count", nullable = false)
+    private int refCount = 1;
+
+    @Column(name = "created_at", nullable = false)
+    private Long createdAt;
 
     public FileRecord() {
-        this.uploadTime = LocalDateTime.now();
+        this.createdAt = System.currentTimeMillis();
     }
 
-    public FileRecord(String fileId, String fileName, String originalFileName, 
-                     String filePath, String fileUrl, long fileSize, 
-                     String fileType, String chatId, String senderId) {
+    public FileRecord(String fileId, String contentHash, String originalFileName,
+                      String fileUrl, Long fileSize, String fileType) {
         this.fileId = fileId;
-        this.fileName = fileName;
+        this.contentHash = contentHash;
         this.originalFileName = originalFileName;
-        this.filePath = filePath;
         this.fileUrl = fileUrl;
         this.fileSize = fileSize;
         this.fileType = fileType;
-        this.chatId = chatId;
-        this.senderId = senderId;
-        this.uploadTime = LocalDateTime.now();
+        this.refCount = 1;
+        this.createdAt = System.currentTimeMillis();
     }
 
-    public String getFileId() {
-        return fileId;
-    }
+    public String getFileId() { return fileId; }
+    public void setFileId(String fileId) { this.fileId = fileId; }
 
-    public void setFileId(String fileId) {
-        this.fileId = fileId;
-    }
+    public String getContentHash() { return contentHash; }
+    public void setContentHash(String contentHash) { this.contentHash = contentHash; }
 
-    public String getFileName() {
-        return fileName;
-    }
+    public String getOriginalFileName() { return originalFileName; }
+    public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }
 
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
+    public String getFileUrl() { return fileUrl; }
+    public void setFileUrl(String fileUrl) { this.fileUrl = fileUrl; }
 
-    public String getOriginalFileName() {
-        return originalFileName;
-    }
+    public Long getFileSize() { return fileSize; }
+    public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
 
-    public void setOriginalFileName(String originalFileName) {
-        this.originalFileName = originalFileName;
-    }
+    public String getFileType() { return fileType; }
+    public void setFileType(String fileType) { this.fileType = fileType; }
 
-    public String getFilePath() {
-        return filePath;
-    }
+    public int getRefCount() { return refCount; }
+    public void setRefCount(int refCount) { this.refCount = refCount; }
 
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
-    }
-
-    public String getFileUrl() {
-        return fileUrl;
-    }
-
-    public void setFileUrl(String fileUrl) {
-        this.fileUrl = fileUrl;
-    }
-
-    public long getFileSize() {
-        return fileSize;
-    }
-
-    public void setFileSize(long fileSize) {
-        this.fileSize = fileSize;
-    }
-
-    public String getFileType() {
-        return fileType;
-    }
-
-    public void setFileType(String fileType) {
-        this.fileType = fileType;
-    }
-
-    public String getChatId() {
-        return chatId;
-    }
-
-    public void setChatId(String chatId) {
-        this.chatId = chatId;
-    }
-
-    public String getSenderId() {
-        return senderId;
-    }
-
-    public void setSenderId(String senderId) {
-        this.senderId = senderId;
-    }
-
-    public LocalDateTime getUploadTime() {
-        return uploadTime;
-    }
-
-    public void setUploadTime(LocalDateTime uploadTime) {
-        this.uploadTime = uploadTime;
-    }
+    public Long getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Long createdAt) { this.createdAt = createdAt; }
 }

@@ -19,16 +19,147 @@ public class AvatarController {
     private AvatarService avatarService;
 
     /**
-     * 上传用户头像
+     * 第一阶段：上传用户头像到临时目录
      */
+    @PostMapping("/user/{userId}/temp")
+    public ResponseEntity<Map<String, Object>> uploadUserAvatarTemp(
+            @PathVariable Long userId,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            String tempPath = avatarService.uploadUserAvatarTemp(userId, file);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "头像已上传到临时目录",
+                    "tempPath", tempPath
+            ));
+        } catch (Exception e) {
+            log.error("用户头像临时上传失败", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 第二阶段：确认用户头像（从 temp 移到正式目录）
+     */
+    @PostMapping("/user/{userId}/confirm")
+    public ResponseEntity<Map<String, Object>> confirmUserAvatar(
+            @PathVariable Long userId,
+            @RequestBody Map<String, String> request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
+        try {
+            String tempPath = request.get("tempPath");
+            if (tempPath == null || tempPath.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "tempPath 不能为空"
+                ));
+            }
+            String url = avatarService.confirmUserAvatar(
+                    userId, tempPath,
+                    resolveScheme(httpRequest),
+                    resolveServerName(httpRequest),
+                    resolveServerPort(httpRequest));
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "头像确认成功",
+                    "url", url
+            ));
+        } catch (Exception e) {
+            log.error("用户头像确认失败", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 取消头像上传（删除临时文件）
+     */
+    @PostMapping("/cancel")
+    public ResponseEntity<Map<String, Object>> cancelAvatar(
+            @RequestBody Map<String, String> request) {
+        String tempPath = request.get("tempPath");
+        if (tempPath != null && !tempPath.isBlank()) {
+            avatarService.cancelUserAvatar(tempPath);
+        }
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "已取消"
+        ));
+    }
+
+    /**
+     * 第一阶段：上传AI助手头像到临时目录
+     */
+    @PostMapping("/ai/{assistantId}/temp")
+    public ResponseEntity<Map<String, Object>> uploadAiAvatarTemp(
+            @PathVariable Long assistantId,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "头像已上传到临时目录",
+                    "tempPath", tempPath
+            ));
+        } catch (Exception e) {
+            log.error("AI助手头像临时上传失败", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 第二阶段：确认AI助手头像
+     */
+    @PostMapping("/ai/{assistantId}/confirm")
+    public ResponseEntity<Map<String, Object>> confirmAiAvatar(
+            @PathVariable Long assistantId,
+            @RequestBody Map<String, String> request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
+        try {
+            String tempPath = request.get("tempPath");
+            if (tempPath == null || tempPath.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "tempPath 不能为空"
+                ));
+            }
+            String url = avatarService.confirmAiAvatar(
+                    assistantId, tempPath,
+                    resolveScheme(httpRequest),
+                    resolveServerName(httpRequest),
+                    resolveServerPort(httpRequest));
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "头像确认成功",
+                    "url", url
+            ));
+        } catch (Exception e) {
+            log.error("AI助手头像确认失败", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    // 保留旧接口兼容
     @PostMapping("/user/{userId}")
-    public ResponseEntity<Map<String, Object>> uploadUserAvatar(
+    public ResponseEntity<Map<String, Object>> uploadUserAvatarLegacy(
             @PathVariable Long userId,
             @RequestParam("file") MultipartFile file,
             jakarta.servlet.http.HttpServletRequest request) {
         try {
-            String url = avatarService.uploadUserAvatar(
-                    userId, file,
+            String tempPath = avatarService.uploadUserAvatarTemp(userId, file);
+            String url = avatarService.confirmUserAvatar(
+                    userId, tempPath,
                     resolveScheme(request),
                     resolveServerName(request),
                     resolveServerPort(request));
@@ -46,17 +177,15 @@ public class AvatarController {
         }
     }
 
-    /**
-     * 上传AI助手头像
-     */
     @PostMapping("/ai/{assistantId}")
-    public ResponseEntity<Map<String, Object>> uploadAiAvatar(
+    public ResponseEntity<Map<String, Object>> uploadAiAvatarLegacy(
             @PathVariable Long assistantId,
             @RequestParam("file") MultipartFile file,
             jakarta.servlet.http.HttpServletRequest request) {
         try {
-            String url = avatarService.uploadAiAvatar(
-                    assistantId, file,
+            String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
+            String url = avatarService.confirmAiAvatar(
+                    assistantId, tempPath,
                     resolveScheme(request),
                     resolveServerName(request),
                     resolveServerPort(request));
@@ -85,12 +214,10 @@ public class AvatarController {
     private String resolveServerName(jakarta.servlet.http.HttpServletRequest request) {
         String forwardedHost = request.getHeader("X-Forwarded-Host");
         String hostHeader = forwardedHost != null && !forwardedHost.isBlank()
-                ? forwardedHost
-                : request.getHeader("Host");
+                ? forwardedHost : request.getHeader("Host");
         if (hostHeader == null || hostHeader.isBlank()) {
             return request.getServerName();
         }
-
         String normalizedHost = hostHeader.split(",", 2)[0].trim();
         if (normalizedHost.startsWith("[")) {
             int closingBracketIndex = normalizedHost.indexOf(']');
@@ -99,7 +226,6 @@ public class AvatarController {
             }
             return request.getServerName();
         }
-
         String[] hostParts = normalizedHost.split(":", 2);
         return hostParts[0];
     }
@@ -109,11 +235,9 @@ public class AvatarController {
         if (forwardedPort != null && !forwardedPort.isBlank()) {
             return Integer.parseInt(forwardedPort.split(",", 2)[0].trim());
         }
-
         String forwardedHost = request.getHeader("X-Forwarded-Host");
         String hostHeader = forwardedHost != null && !forwardedHost.isBlank()
-                ? forwardedHost
-                : request.getHeader("Host");
+                ? forwardedHost : request.getHeader("Host");
         if (hostHeader != null && !hostHeader.isBlank()) {
             String normalizedHost = hostHeader.split(",", 2)[0].trim();
             if (normalizedHost.startsWith("[")) {
@@ -130,7 +254,6 @@ public class AvatarController {
                 }
             }
         }
-
         return request.getServerPort();
     }
 }
