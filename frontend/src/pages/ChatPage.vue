@@ -47,7 +47,7 @@ const uploadProgress = ref(0)
 const uploadingFileName = ref('')
 let dragDepth = 0
 
-const { connect, sendMessage, sendFileMessage, messages, onlineUsers, setCurrentRoom, rooms, loadMessageHistory, sendMentionMessage, markMentionsAsRead, loadUnreadMentions, unreadMentionCount, latestMention } = useWebSocket()
+const { connect, sendMessage, sendFileMessage, messages, onlineUsers, setCurrentRoom, rooms, loadMessageHistory, sendMentionMessage, markMentionsAsRead, loadUnreadMentions, unreadMentionCount, latestMention, loadRoomMembers, roomMembers } = useWebSocket()
 
 const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 const isProjectNoticeOpen = ref(false)
@@ -86,6 +86,7 @@ onMounted(() => {
   setCurrentRoom(currentRoomId.value)
   loadMessageHistory(currentRoomId.value)
   loadUnreadMentions(currentRoomId.value)
+  loadRoomMembers(currentRoomId.value)
 })
 
 onBeforeRouteUpdate((to, from, next) => {
@@ -95,6 +96,7 @@ onBeforeRouteUpdate((to, from, next) => {
     setCurrentRoom(currentRoomId.value)
     loadMessageHistory(currentRoomId.value)
     loadUnreadMentions(currentRoomId.value)
+    loadRoomMembers(currentRoomId.value)
   }
   next()
 })
@@ -280,7 +282,7 @@ const openFilePreview = (file: { fileName: string; fileSize: number; fileUrl: st
         ref="messageInputRef"
         :is-dark="isDarkTheme"
         :disabled="isSendingFiles"
-        :online-users="onlineUsers"
+        :online-users="roomMembers"
         @send="handleSendText"
         @send-files="handleSendFiles"
         @error="showUploadError"

@@ -71,6 +71,7 @@ export const useChatStore = defineStore('chat', () => {
   const readReceipts = ref<Map<string, Set<string>>>(new Map())
   const unreadMentionCount = ref<Record<string, number>>({})
   const latestMention = ref<Record<string, any>>({})
+  const roomMembers = ref<User[]>([])
 
   const roomMessages = computed(() => {
     return messages.value
@@ -163,6 +164,10 @@ export const useChatStore = defineStore('chat', () => {
     latestMention.value[roomId] = mention
   }
 
+  function setRoomMembers(members: User[]) {
+    roomMembers.value = members
+  }
+
   return {
     isConnected,
     reconnectAttempts,
@@ -180,6 +185,7 @@ export const useChatStore = defineStore('chat', () => {
     readReceipts,
     unreadMentionCount,
     latestMention,
+    roomMembers,
     roomMessages,
     currentRoom,
     getUnreadCount,
@@ -191,6 +197,7 @@ export const useChatStore = defineStore('chat', () => {
     incrementUnreadMentionCount,
     setUnreadMentionCount,
     clearUnreadMentionCount,
-    setLatestMention
+    setLatestMention,
+    setRoomMembers
   }
 })

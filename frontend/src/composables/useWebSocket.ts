@@ -306,6 +306,10 @@ export function useWebSocket() {
         onlineUsers.value = event.data.users || []
         break
 
+      case 'room:members:response':
+        store.setRoomMembers(event.data.members || [])
+        break
+
       case 'message:read': {
         const readRoomId = String(event.data.roomId)
         const readUserId = String(event.data.userId)
@@ -474,6 +478,15 @@ export function useWebSocket() {
     sharedSocket.send(JSON.stringify(historyEvent))
   }
 
+  const loadRoomMembers = (roomId: string) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
+    const membersEvent: WebSocketEvent = {
+      type: 'room:members',
+      data: { roomId }
+    }
+    sharedSocket.send(JSON.stringify(membersEvent))
+  }
+
   // AI相关函数
   const sendAiChat = (assistantId: string, content: string, conversationId?: string) => {
     const aiChatEvent: WebSocketEvent = {
@@ -599,6 +612,7 @@ export function useWebSocket() {
     readReceipts,
     unreadMentionCount,
     latestMention,
+    roomMembers: store.roomMembers,
     connect,
     sendMessage,
     sendFileMessage,
@@ -620,6 +634,7 @@ export function useWebSocket() {
     sendInviteMember,
     sendMentionMessage,
     markMentionsAsRead,
-    loadUnreadMentions
+    loadUnreadMentions,
+    loadRoomMembers
   }
 }
