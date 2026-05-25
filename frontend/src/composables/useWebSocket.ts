@@ -327,6 +327,15 @@ export function useWebSocket() {
         break
       }
 
+      case 'user:avatar:updated': {
+        const { userId, avatarUrl } = event.data
+        const userIndex = onlineUsers.value.findIndex(u => u.userId === String(userId))
+        if (userIndex !== -1) {
+          onlineUsers.value[userIndex] = { ...onlineUsers.value[userIndex], avatarUrl }
+        }
+        break
+      }
+
       case 'message:read': {
         const readRoomId = String(event.data.roomId)
         const readUserId = String(event.data.userId)

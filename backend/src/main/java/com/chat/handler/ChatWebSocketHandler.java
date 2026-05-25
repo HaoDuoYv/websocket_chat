@@ -785,6 +785,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         broadcastToRoomMembers(roomId, avatarEvent);
     }
 
+    public void broadcastUserAvatarUpdated(Long userId, String avatarUrl) {
+        try {
+            Map<String, Object> data = new HashMap<>();
+            data.put("userId", String.valueOf(userId));
+            data.put("avatarUrl", avatarUrl);
+            broadcastToAll(new Event("user:avatar:updated", data));
+        } catch (IOException e) {
+            logger.error("广播用户头像更新失败 userId={}", userId, e);
+        }
+    }
+
     private Map<String, Object> buildOnlineUser(Long userId) {
         return userService.findById(userId)
                 .map(user -> buildOnlineUser(user.getId(), user.getUsername()))

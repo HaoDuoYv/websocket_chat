@@ -6,12 +6,17 @@ import com.chat.repository.AiAssistantRepository;
 import com.chat.repository.RoomRepository;
 import com.chat.service.AdminAuthService;
 import com.chat.service.AvatarService;
+import com.chat.handler.ChatWebSocketHandler;
+import com.chat.utils.JwtUtil;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +39,12 @@ public class AvatarController {
     @Autowired
     private RoomRepository roomRepository;
 
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private ChatWebSocketHandler chatWebSocketHandler;
+
     private ResponseEntity<Map<String, Object>> checkSystemAssistantPermission(Long assistantId, HttpSession session) {
         Optional<AiAssistant> opt = aiAssistantRepository.findById(assistantId);
         if (opt.isPresent() && Boolean.TRUE.equals(opt.get().getIsSystem())) {
@@ -47,27 +58,25 @@ public class AvatarController {
         return null;
     }
 
-    private ResponseEntity<Map<String, Object>> checkRoomOwnerPermission(Long roomId, HttpSession session) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) {
-            return ResponseEntity.status(401).body(Map.of(
-                    "success", false,
-                    "message", "未登录"
-            ));
+    private ResponseEntity<Map<String, Object>> checkRoomOwnerPermission(Long roomId, HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "message", "未登录"));
+        }
+        Long userId;
+        try {
+            Claims claims = jwtUtil.parseToken(authHeader.substring(7));
+            userId = jwtUtil.getUserId(claims);
+        } catch (JwtException e) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "message", "token无效"));
         }
         Optional<Room> roomOpt = roomRepository.findById(roomId);
         if (roomOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "房间不存在"
-            ));
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "房间不存在"));
         }
         Long ownerId = roomOpt.get().getOwnerId();
         if (ownerId == null || !userId.equals(ownerId)) {
-            return ResponseEntity.status(403).body(Map.of(
-                    "success", false,
-                    "message", "只有群主可以修改群头像"
-            ));
+            return ResponseEntity.status(403).body(Map.of("success", false, "message", "只有群主可以修改群头像"));
         }
         return null;
     }
@@ -116,6 +125,7 @@ public class AvatarController {
                     resolveScheme(httpRequest),
                     resolveServerName(httpRequest),
                     resolveServerPort(httpRequest));
+            chatWebSocketHandler.broadcastUserAvatarUpdated(userId, url);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "头像确认成功",
@@ -153,8 +163,8 @@ public class AvatarController {
     public ResponseEntity<Map<String, Object>> uploadRoomAvatarTemp(
             @PathVariable Long roomId,
             @RequestParam("file") MultipartFile file,
-            HttpSession session) {
-        ResponseEntity<Map<String, Object>> permCheck = checkRoomOwnerPermission(roomId, session);
+            HttpServletRequest request) {
+        ResponseEntity<Map<String, Object>> permCheck = checkRoomOwnerPermission(roomId, request);
         if (permCheck != null) return permCheck;
         try {
             String tempPath = avatarService.uploadRoomAvatarTemp(roomId, file);
@@ -179,9 +189,8 @@ public class AvatarController {
     public ResponseEntity<Map<String, Object>> confirmRoomAvatar(
             @PathVariable Long roomId,
             @RequestBody Map<String, String> request,
-            jakarta.servlet.http.HttpServletRequest httpRequest,
-            HttpSession session) {
-        ResponseEntity<Map<String, Object>> permCheck = checkRoomOwnerPermission(roomId, session);
+            HttpServletRequest httpRequest) {
+        ResponseEntity<Map<String, Object>> permCheck = checkRoomOwnerPermission(roomId, httpRequest);
         if (permCheck != null) return permCheck;
         try {
             String tempPath = request.get("tempPath");
@@ -287,6 +296,7 @@ public class AvatarController {
                     resolveScheme(request),
                     resolveServerName(request),
                     resolveServerPort(request));
+            chatWebSocketHandler.broadcastUserAvatarUpdated(userId, url);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "头像上传成功",

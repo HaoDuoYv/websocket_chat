@@ -1643,7 +1643,13 @@ const isRoomReadByOthers = (roomId: string): boolean => {
             :class="isDarkTheme ? 'border-gray-800 hover:bg-gray-800/50' : 'border-gray-50 hover:bg-gray-50/50'"
           >
             <div>
+              <img
+                v-if="contact.avatarUrl"
+                :src="contact.avatarUrl"
+                class="w-10 h-10 rounded-full object-cover"
+              />
               <div
+                v-else
                 class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
                 :style="{ backgroundColor: getAvatarColor(contact.userId) }"
               >
