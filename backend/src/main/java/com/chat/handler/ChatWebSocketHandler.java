@@ -198,6 +198,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             case "room:members":
                 handleRoomMembers(session, event.getData());
                 break;
+            case "room:avatar:updated":
+                handleRoomAvatarUpdated(session, event.getData());
+                break;
         }
     }
 
@@ -263,17 +266,22 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         // 保存消息到数据库
         Message savedMessage = messageService.sendMessage(roomId, senderId, content, "text");
         String senderName = messageService.getSenderName(senderId);
+        String senderAvatarUrl = userService.findById(senderId).map(User::getAvatarUrl).orElse(null);
 
         // 发送消息给房间所有成员 - 将 ID 转为 String 避免前端精度丢失
-        Event receiveEvent = new Event("message:new", Map.of(
-                "id", String.valueOf(savedMessage.getId()),
-                "roomId", String.valueOf(roomId),
-                "senderId", String.valueOf(senderId),
-                "senderName", senderName,
-                "content", content,
-                "type", "text",
-                "seq", savedMessage.getSeq(),
-                "timestamp", savedMessage.getTimestamp()));
+        Map<String, Object> msgData = new HashMap<>();
+        msgData.put("id", String.valueOf(savedMessage.getId()));
+        msgData.put("roomId", String.valueOf(roomId));
+        msgData.put("senderId", String.valueOf(senderId));
+        msgData.put("senderName", senderName);
+        msgData.put("content", content);
+        msgData.put("type", "text");
+        msgData.put("seq", savedMessage.getSeq());
+        msgData.put("timestamp", savedMessage.getTimestamp());
+        if (senderAvatarUrl != null) {
+            msgData.put("senderAvatarUrl", senderAvatarUrl);
+        }
+        Event receiveEvent = new Event("message:new", msgData);
 
         broadcastToRoomMembers(roomId, receiveEvent);
     }
@@ -298,6 +306,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Message savedMessage = messageService.sendFileMessage(
                 roomId, senderId, content, fileId, fileName, fileUrl, fileSize, fileType);
         String senderName = messageService.getSenderName(senderId);
+        String senderAvatarUrl = userService.findById(senderId).map(User::getAvatarUrl).orElse(null);
 
         // 发送文件消息给房间所有成员 - 将 ID 转为 String 避免前端精度丢失
         Map<String, Object> eventData = new HashMap<>();
@@ -314,6 +323,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         eventData.put("fileUrl", fileUrl);
         eventData.put("fileSize", fileSize);
         eventData.put("fileType", fileType);
+        if (senderAvatarUrl != null) {
+            eventData.put("senderAvatarUrl", senderAvatarUrl);
+        }
 
         Event receiveEvent = new Event("message:new:file", eventData);
         broadcastToRoomMembers(roomId, receiveEvent);
@@ -557,6 +569,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 msgMap.put("type", msg.getType());
                 msgMap.put("seq", msg.getSeq());
                 msgMap.put("timestamp", msg.getTimestamp());
+                userService.findById(msg.getSenderId()).ifPresent(u -> {
+                    if (u.getAvatarUrl() != null) msgMap.put("senderAvatarUrl", u.getAvatarUrl());
+                });
                 if ("file".equals(msg.getType())) {
                     msgMap.put("fileId", msg.getFileId());
                     msgMap.put("fileName", msg.getFileName());
@@ -674,6 +689,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             map.put("type", msg.getType());
             map.put("seq", msg.getSeq());
             map.put("timestamp", msg.getTimestamp());
+            userService.findById(msg.getSenderId()).ifPresent(u -> {
+                if (u.getAvatarUrl() != null) map.put("senderAvatarUrl", u.getAvatarUrl());
+            });
             if ("file".equals(msg.getType())) {
                 map.put("fileId", msg.getFileId());
                 map.put("fileName", msg.getFileName());
@@ -721,6 +739,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                     Map<String, Object> userMap = new HashMap<>();
                     userMap.put("userId", String.valueOf(user.getId()));
                     userMap.put("username", user.getUsername());
+                    if (user.getAvatarUrl() != null) {
+                        userMap.put("avatarUrl", user.getAvatarUrl());
+                    }
                     return userMap;
                 })
                 .collect(Collectors.toList());
@@ -729,6 +750,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 "roomId", String.valueOf(roomId),
                 "members", members));
         sendToSession(session.getId(), membersEvent);
+    }
+
+    private void handleRoomAvatarUpdated(WebSocketSession session, Map<String, Object> data) throws IOException {
+        Long roomId = parseLongId(data.get("roomId"));
+        String avatarUrl = (String) data.get("avatarUrl");
+        Long senderId = sessionUserMap.get(session.getId());
+
+        if (senderId == null || roomId == null) return;
+
+        // 校验发送者是群主
+        Optional<Room> roomOpt = roomService.findById(roomId);
+        if (roomOpt.isEmpty() || !senderId.equals(roomOpt.get().getOwnerId())) {
+            return;
+        }
+
+        Map<String, Object> eventData = new HashMap<>();
+        eventData.put("roomId", String.valueOf(roomId));
+        eventData.put("avatarUrl", avatarUrl);
+
+        Event avatarEvent = new Event("room:avatar:updated", eventData);
+        broadcastToRoomMembers(roomId, avatarEvent);
     }
 
     private Map<String, Object> buildOnlineUser(Long userId) {
@@ -741,6 +783,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("userId", String.valueOf(userId));
         userMap.put("username", username);
+        userService.findById(userId).ifPresent(u -> {
+            if (u.getAvatarUrl() != null) {
+                userMap.put("avatarUrl", u.getAvatarUrl());
+            }
+        });
         return userMap;
     }
 
