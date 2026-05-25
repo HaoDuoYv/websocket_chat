@@ -304,8 +304,13 @@ defineExpose({ scrollToBottom })
           ]"
         >
           <img
-            v-if="(isAiMode || String(message.senderId || '') === currentUserId) && currentUserAvatar"
+            v-if="String(message.senderId || '') === currentUserId && currentUserAvatar"
             :src="currentUserAvatar"
+            class="w-8 h-8 flex-shrink-0 rounded-full object-cover shadow-sm"
+          />
+          <img
+            v-else-if="message.senderAvatarUrl"
+            :src="message.senderAvatarUrl"
             class="w-8 h-8 flex-shrink-0 rounded-full object-cover shadow-sm"
           />
           <div

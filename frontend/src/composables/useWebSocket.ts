@@ -196,6 +196,7 @@ export function useWebSocket() {
           content: fileMsgData.content,
           senderId: String(fileMsgData.senderId),
           senderName: fileMsgData.senderName,
+          senderAvatarUrl: fileMsgData.senderAvatarUrl,
           timestamp: fileMsgData.timestamp,
           seq: fileMsgData.seq,
           type: 'file',
