@@ -633,12 +633,20 @@ export function useWebSocket() {
 
   const loadUnreadMentions = (roomId: string) => {
     if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
-    
+
     const listEvent = {
       type: 'mention:unread:list',
       data: { roomId }
     }
     sharedSocket.send(JSON.stringify(listEvent))
+  }
+
+  const refreshRoomList = () => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN || !currentUser) return
+    sharedSocket.send(JSON.stringify({
+      type: 'room:list',
+      data: { userId: currentUser.userId }
+    }))
   }
 
   return {
@@ -682,6 +690,8 @@ export function useWebSocket() {
     markMentionsAsRead,
     loadUnreadMentions,
     loadRoomMembers,
-    sendRoomAvatarUpdated
+    sendRoomAvatarUpdated,
+    refreshRoomList,
+    userRenamedCounter: store.userRenamedCounter
   }
 }

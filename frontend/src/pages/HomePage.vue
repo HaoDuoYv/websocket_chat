@@ -82,6 +82,8 @@ const {
   lastPrivateRoomCreated,
   readReceipts,
   sendRoomAvatarUpdated,
+  refreshRoomList,
+  userRenamedCounter,
 } = useWebSocket()
 
 const systemAssistant = computed(() => aiStore.systemAssistant)
@@ -659,18 +661,21 @@ watch(lastBannedResult, result => {
   lastBannedResult.value = null
 })
 
-watch(lastRenamedResult, result => {
+watch(lastRenamedResult, async result => {
   if (!result || !user.value) return
   // 更新本地用户数据
   user.value = { ...user.value, username: result.username }
   localStorage.setItem('user', JSON.stringify(user.value))
-  // 同步更新 onlineUsers 中自己的用户名
-  const selfIndex = onlineUsers.value.findIndex(u => u.userId === user.value?.userId)
-  if (selfIndex !== -1) {
-    onlineUsers.value[selfIndex] = { ...onlineUsers.value[selfIndex], username: result.username }
-  }
   toast.info(`你的用户名已被管理员修改为：${result.username}`)
   lastRenamedResult.value = null
+})
+
+// 任何用户改名后，刷新房间列表（私聊名/群成员名同步）和群成员列表
+watch(userRenamedCounter, async () => {
+  refreshRoomList()
+  if (selectedRoomId.value && currentRoom.value?.type === 'public') {
+    await loadRoomMembers(selectedRoomId.value, showMemberList.value)
+  }
 })
 
 watch(lastRoomMemberLeft, async event => {

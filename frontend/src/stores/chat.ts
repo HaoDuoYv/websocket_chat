@@ -69,6 +69,7 @@ export const useChatStore = defineStore('chat', () => {
   const lastInviteResult = ref<InviteResult | null>(null)
   const lastBannedResult = ref<{ message: string } | null>(null)
   const lastRenamedResult = ref<{ userId: string; username: string } | null>(null)
+  const userRenamedCounter = ref(0)
   const lastRoomMemberLeft = ref<RoomMemberLeftEvent | null>(null)
   const lastPrivateRoomCreated = ref<{ id: string; name: string; type: string } | null>(null)
   const roomLastSeq = ref<Record<string, number>>({})
@@ -144,6 +145,7 @@ export const useChatStore = defineStore('chat', () => {
     lastInviteResult.value = null
     lastBannedResult.value = null
     lastRenamedResult.value = null
+    userRenamedCounter.value = 0
     lastRoomMemberLeft.value = null
     lastPrivateRoomCreated.value = null
     roomLastSeq.value = new Map() as any
@@ -196,13 +198,8 @@ export const useChatStore = defineStore('chat', () => {
       member.username = newUsername
     }
 
-    // 4. 更新私聊房间显示名（含对方名字的房间）
-    for (const room of rooms.value) {
-      if (room.type === 'private' && room.name && room.name.includes('(')) {
-        // 私聊房间名格式可能是 "对方名字" 或含括号的格式
-        // 不做处理，由 room:list:response 刷新时更新
-      }
-    }
+    // 4. 触发刷新计数器（用于通知 HomePage 刷新房间列表和群成员）
+    userRenamedCounter.value++
   }
 
   return {
@@ -217,6 +214,7 @@ export const useChatStore = defineStore('chat', () => {
     lastInviteResult,
     lastBannedResult,
     lastRenamedResult,
+    userRenamedCounter,
     lastRoomMemberLeft,
     lastPrivateRoomCreated,
     roomLastSeq,
