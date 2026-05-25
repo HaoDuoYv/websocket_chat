@@ -47,6 +47,31 @@ public class AvatarController {
         return null;
     }
 
+    private ResponseEntity<Map<String, Object>> checkRoomOwnerPermission(Long roomId, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "message", "未登录"
+            ));
+        }
+        Optional<Room> roomOpt = roomRepository.findById(roomId);
+        if (roomOpt.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "房间不存在"
+            ));
+        }
+        Long ownerId = roomOpt.get().getOwnerId();
+        if (ownerId == null || !userId.equals(ownerId)) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "只有群主可以修改群头像"
+            ));
+        }
+        return null;
+    }
+
     /**
      * 第一阶段：上传用户头像到临时目录
      */
@@ -128,27 +153,9 @@ public class AvatarController {
     public ResponseEntity<Map<String, Object>> uploadRoomAvatarTemp(
             @PathVariable Long roomId,
             @RequestParam("file") MultipartFile file,
-            jakarta.servlet.http.HttpSession session) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) {
-            return ResponseEntity.status(401).body(Map.of(
-                    "success", false,
-                    "message", "未登录"
-            ));
-        }
-        Optional<Room> roomOpt = roomRepository.findById(roomId);
-        if (roomOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "房间不存在"
-            ));
-        }
-        if (!userId.equals(roomOpt.get().getOwnerId())) {
-            return ResponseEntity.status(403).body(Map.of(
-                    "success", false,
-                    "message", "只有群主可以修改群头像"
-            ));
-        }
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> permCheck = checkRoomOwnerPermission(roomId, session);
+        if (permCheck != null) return permCheck;
         try {
             String tempPath = avatarService.uploadRoomAvatarTemp(roomId, file);
             return ResponseEntity.ok(Map.of(
@@ -173,27 +180,9 @@ public class AvatarController {
             @PathVariable Long roomId,
             @RequestBody Map<String, String> request,
             jakarta.servlet.http.HttpServletRequest httpRequest,
-            jakarta.servlet.http.HttpSession session) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) {
-            return ResponseEntity.status(401).body(Map.of(
-                    "success", false,
-                    "message", "未登录"
-            ));
-        }
-        Optional<Room> roomOpt = roomRepository.findById(roomId);
-        if (roomOpt.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "房间不存在"
-            ));
-        }
-        if (!userId.equals(roomOpt.get().getOwnerId())) {
-            return ResponseEntity.status(403).body(Map.of(
-                    "success", false,
-                    "message", "只有群主可以修改群头像"
-            ));
-        }
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> permCheck = checkRoomOwnerPermission(roomId, session);
+        if (permCheck != null) return permCheck;
         try {
             String tempPath = request.get("tempPath");
             if (tempPath == null || tempPath.isBlank()) {
