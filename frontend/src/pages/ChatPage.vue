@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useWebSocket } from '@/composables/useWebSocket'
+import MentionNotification from '@/components/MentionNotification.vue'
 import MessageList from '@/components/MessageList.vue'
 import MessageInput from '@/components/MessageInput.vue'
 import ChatSidebar from '@/components/ChatSidebar.vue'
@@ -46,7 +47,7 @@ const uploadProgress = ref(0)
 const uploadingFileName = ref('')
 let dragDepth = 0
 
-const { connect, sendMessage, sendFileMessage, messages, onlineUsers, setCurrentRoom, rooms, loadMessageHistory } = useWebSocket()
+const { connect, sendMessage, sendFileMessage, messages, onlineUsers, setCurrentRoom, rooms, loadMessageHistory, sendMentionMessage, markMentionsAsRead, loadUnreadMentions, unreadMentionCount, latestMention } = useWebSocket()
 
 const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 const isProjectNoticeOpen = ref(false)
@@ -84,6 +85,7 @@ onMounted(() => {
   initChat()
   setCurrentRoom(currentRoomId.value)
   loadMessageHistory(currentRoomId.value)
+  loadUnreadMentions(currentRoomId.value)
 })
 
 onBeforeRouteUpdate((to, from, next) => {
@@ -92,13 +94,27 @@ onBeforeRouteUpdate((to, from, next) => {
     currentRoomId.value = to.params.chatId as string
     setCurrentRoom(currentRoomId.value)
     loadMessageHistory(currentRoomId.value)
+    loadUnreadMentions(currentRoomId.value)
   }
   next()
 })
 
-const handleSendText = (content: string, _mentions: User[], _mentionAll: boolean) => {
+const handleSendText = (content: string, mentions: User[] = [], mentionAll: boolean = false) => {
   if (!user.value || !roomId.value) return
-  sendMessage(roomId.value, content, user.value.userId)
+  if (mentions.length > 0 || mentionAll) {
+    sendMentionMessage(roomId.value, content, mentions, mentionAll)
+  } else {
+    sendMessage(roomId.value, content, user.value.userId)
+  }
+}
+
+const handleMarkMentionsAsRead = () => {
+  if (!roomId.value) return
+  markMentionsAsRead(roomId.value)
+}
+
+const scrollToLatestMention = () => {
+  handleMarkMentionsAsRead()
 }
 
 const handleSendFiles = async (attachments: PendingAttachment[]) => {
@@ -238,6 +254,15 @@ const openFilePreview = (file: { fileName: string; fileSize: number; fileUrl: st
           </button>
         </div>
       </header>
+
+      <MentionNotification
+        v-if="unreadMentionCount[roomId] > 0"
+        :count="unreadMentionCount[roomId]"
+        :latest-mention="latestMention[roomId]"
+        :is-dark="isDarkTheme"
+        @click="scrollToLatestMention"
+        @mark-read="handleMarkMentionsAsRead"
+      />
 
       <MessageList
         ref="messagesContainer"
