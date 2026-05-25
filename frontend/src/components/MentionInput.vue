@@ -35,17 +35,21 @@ const handleInput = (e: Event) => {
   const value = (e.target as HTMLInputElement).value
   const cursorPos = (e.target as HTMLInputElement).selectionStart || 0
   
-  const lastAtIndex = value.lastIndexOf('@', cursorPos)
+  // 查找光标前最近的@符号
+  const textBeforeCursor = value.substring(0, cursorPos)
+  const lastAtIndex = textBeforeCursor.lastIndexOf('@')
+  
   if (lastAtIndex !== -1) {
-    const charBeforeAt = lastAtIndex > 0 ? value[lastAtIndex - 1] : ' '
-    if (charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0) {
+    // 检查@前面是否是空格、换行或行首
+    const charBeforeAt = lastAtIndex > 0 ? value[lastAtIndex - 1] : ''
+    if (lastAtIndex === 0 || charBeforeAt === ' ' || charBeforeAt === '\n') {
       mentionStartPos.value = lastAtIndex
       showMentionList.value = true
       updateMentionListPosition()
+      return
     }
-  } else {
-    showMentionList.value = false
   }
+  showMentionList.value = false
 }
 
 const updateMentionListPosition = () => {

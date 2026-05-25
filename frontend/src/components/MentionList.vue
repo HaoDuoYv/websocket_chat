@@ -40,6 +40,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
   } else if (e.key === 'Enter') {
     e.preventDefault()
+    e.stopPropagation()
     if (selectedIndex.value === 0) {
       handleSelect(null) // @所有人
     } else {
