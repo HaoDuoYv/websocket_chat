@@ -469,6 +469,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             roomMap.put("type", room.getType());
             roomMap.put("ownerId", String.valueOf(room.getOwnerId()));
             roomMap.put("createdAt", room.getCreatedAt());
+            if (room.getAvatarUrl() != null && !room.getAvatarUrl().isBlank()) {
+                roomMap.put("avatarUrl", room.getAvatarUrl());
+            }
 
             // 从批量查询结果中获取最后一条消息
             Message lastMsg = latestMessages.get(room.getId());
