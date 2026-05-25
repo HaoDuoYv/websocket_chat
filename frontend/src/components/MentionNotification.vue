@@ -1,37 +1,50 @@
 <script setup lang="ts">
 defineProps<{
   count: number
-  latestMention?: { senderName?: string; content?: string } | null
+  latestMention?: {
+    senderName?: string
+    content?: string
+  }
   isDark: boolean
 }>()
 
 const emit = defineEmits<{
-  (e: 'click'): void
-  (e: 'mark-read'): void
+  click: []
+  markRead: []
 }>()
+
+const handleClick = () => {
+  emit('click')
+}
+
+const handleMarkRead = () => {
+  emit('markRead')
+}
 </script>
 
 <template>
-  <div
-    class="absolute top-[72px] left-1/2 -translate-x-1/2 z-30 cursor-pointer select-none"
-    @click="emit('click')"
+  <div 
+    class="px-4 py-2 cursor-pointer transition-colors"
+    :class="isDark ? 'bg-blue-900/20 hover:bg-blue-900/30' : 'bg-blue-50 hover:bg-blue-100'"
+    @click="handleClick"
   >
-    <div
-      class="flex items-center gap-2 rounded-full px-4 py-2 shadow-lg backdrop-blur-sm transition-all hover:scale-105"
-      :class="isDark ? 'bg-blue-600/90 text-white' : 'bg-blue-500/90 text-white'"
-    >
-      <span class="text-xs font-medium">
-        {{ count }} 条未读 @消息
-      </span>
-      <span v-if="latestMention?.senderName" class="text-xs opacity-80 truncate max-w-[160px]">
-        {{ latestMention.senderName }}: {{ latestMention.content?.slice(0, 20) }}
-      </span>
-      <button
-        class="ml-1 text-xs opacity-70 hover:opacity-100 transition-opacity"
-        @click.stop="emit('mark-read')"
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-blue-500">🔔</span>
+        <span class="text-sm font-medium" :class="isDark ? 'text-blue-300' : 'text-blue-600'">
+          有人@我 ({{ count }})
+        </span>
+      </div>
+      <button 
+        class="text-xs px-2 py-1 rounded"
+        :class="isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'"
+        @click.stop="handleMarkRead"
       >
-        标为已读
+        标记已读
       </button>
+    </div>
+    <div v-if="latestMention" class="mt-1 text-xs truncate" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+      {{ latestMention.senderName }}: {{ latestMention.content?.substring(0, 50) }}{{ (latestMention.content?.length || 0) > 50 ? '...' : '' }}
     </div>
   </div>
 </template>
