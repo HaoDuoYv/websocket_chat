@@ -173,6 +173,38 @@ export const useChatStore = defineStore('chat', () => {
     roomMembers.value = members
   }
 
+  /** 用户改名后全局同步：消息列表、在线用户、群成员 */
+  function handleUserRenamed(userId: string, newUsername: string) {
+    // 1. 更新所有消息中的发送者名称
+    for (const roomMsgs of Object.values(messages.value)) {
+      for (const msg of roomMsgs) {
+        if (msg.senderId === userId) {
+          msg.senderName = newUsername
+        }
+      }
+    }
+
+    // 2. 更新在线用户列表
+    const onlineUser = onlineUsers.value.find(u => u.userId === userId)
+    if (onlineUser) {
+      onlineUser.username = newUsername
+    }
+
+    // 3. 更新群成员列表
+    const member = roomMembers.value.find(u => u.userId === userId)
+    if (member) {
+      member.username = newUsername
+    }
+
+    // 4. 更新私聊房间显示名（含对方名字的房间）
+    for (const room of rooms.value) {
+      if (room.type === 'private' && room.name && room.name.includes('(')) {
+        // 私聊房间名格式可能是 "对方名字" 或含括号的格式
+        // 不做处理，由 room:list:response 刷新时更新
+      }
+    }
+  }
+
   return {
     isConnected,
     reconnectAttempts,
@@ -204,6 +236,7 @@ export const useChatStore = defineStore('chat', () => {
     setUnreadMentionCount,
     clearUnreadMentionCount,
     setLatestMention,
-    setRoomMembers
+    setRoomMembers,
+    handleUserRenamed
   }
 })

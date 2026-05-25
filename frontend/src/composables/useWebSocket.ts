@@ -262,12 +262,19 @@ export function useWebSocket() {
         disconnect()
         break
 
-      case 'user:renamed':
-        lastRenamedResult.value = {
-          userId: String(event.data.userId),
-          username: event.data.username
+      case 'user:renamed': {
+        const isSelf = event.data.self === true
+        // 所有用户：更新消息列表、在线用户、群成员中的用户名
+        store.handleUserRenamed(String(event.data.userId), event.data.username)
+        // 仅被改名用户：更新本地 localStorage 和显示 toast
+        if (isSelf) {
+          lastRenamedResult.value = {
+            userId: String(event.data.userId),
+            username: event.data.username
+          }
         }
         break
+      }
 
       case 'kicked':
         localStorage.removeItem('user')
