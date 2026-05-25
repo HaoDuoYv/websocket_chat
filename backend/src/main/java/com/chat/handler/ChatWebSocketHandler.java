@@ -757,11 +757,20 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String avatarUrl = (String) data.get("avatarUrl");
         Long senderId = sessionUserMap.get(session.getId());
 
-        if (senderId == null || roomId == null) return;
+        if (senderId == null || roomId == null) {
+            logger.warn("广播群头像更新失败：senderId 或 roomId 为空 sessionId={}", session.getId());
+            return;
+        }
 
         // 校验发送者是群主
         Optional<Room> roomOpt = roomService.findById(roomId);
         if (roomOpt.isEmpty() || !senderId.equals(roomOpt.get().getOwnerId())) {
+            logger.warn("广播群头像更新失败：用户 {} 不是房间 {} 的群主", senderId, roomId);
+            return;
+        }
+
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            logger.warn("广播群头像更新失败：avatarUrl 为空 roomId={}", roomId);
             return;
         }
 
