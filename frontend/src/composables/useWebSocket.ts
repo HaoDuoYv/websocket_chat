@@ -45,7 +45,9 @@ export function useWebSocket() {
     lastRoomMemberLeft,
     lastPrivateRoomCreated,
     roomLastSeq,
-    readReceipts
+    readReceipts,
+    unreadMentionCount,
+    latestMention
   } = storeToRefs(store)
 
   const connect = (user: User, token?: string) => {
@@ -369,6 +371,22 @@ export function useWebSocket() {
         aiStore.setMessages(messages)
         break
       }
+
+      case 'mention:received': {
+        const mentionData = event.data
+        store.incrementUnreadMentionCount(String(mentionData.roomId))
+        store.setLatestMention(String(mentionData.roomId), mentionData)
+        break
+      }
+
+      case 'mention:unread:list:response': {
+        const unreadData = event.data
+        store.setUnreadMentionCount(String(unreadData.roomId), unreadData.count)
+        if (unreadData.mentions && unreadData.mentions.length > 0) {
+          store.setLatestMention(String(unreadData.roomId), unreadData.mentions[0])
+        }
+        break
+      }
     }
   }
 
@@ -529,6 +547,42 @@ export function useWebSocket() {
     }))
   }
 
+  const sendMentionMessage = (roomId: string, content: string, mentions: User[], mentionAll: boolean) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
+    
+    const mentionEvent = {
+      type: 'mention:send',
+      data: {
+        roomId,
+        content,
+        mentions: mentions.map(m => ({ userId: m.userId, username: m.username })),
+        mentionAll
+      }
+    }
+    sharedSocket.send(JSON.stringify(mentionEvent))
+  }
+
+  const markMentionsAsRead = (roomId: string) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
+    
+    const readEvent = {
+      type: 'mention:read',
+      data: { roomId }
+    }
+    sharedSocket.send(JSON.stringify(readEvent))
+    store.clearUnreadMentionCount(roomId)
+  }
+
+  const loadUnreadMentions = (roomId: string) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
+    
+    const listEvent = {
+      type: 'mention:unread:list',
+      data: { roomId }
+    }
+    sharedSocket.send(JSON.stringify(listEvent))
+  }
+
   return {
     isConnected,
     reconnectAttempts,
@@ -543,6 +597,8 @@ export function useWebSocket() {
     lastPrivateRoomCreated,
     roomLastSeq,
     readReceipts,
+    unreadMentionCount,
+    latestMention,
     connect,
     sendMessage,
     sendFileMessage,
@@ -561,6 +617,9 @@ export function useWebSocket() {
     createAiConversation,
     deleteAiConversation,
     loadAiHistory,
-    sendInviteMember
+    sendInviteMember,
+    sendMentionMessage,
+    markMentionsAsRead,
+    loadUnreadMentions
   }
 }
