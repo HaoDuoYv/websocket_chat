@@ -6,6 +6,7 @@ import com.chat.entity.User;
 import com.chat.entity.AiAssistant;
 import com.chat.entity.AiConversation;
 import com.chat.entity.AiMessage;
+import com.chat.entity.Mention;
 import com.chat.properties.LocalProperties;
 import com.chat.service.MessageService;
 import com.chat.service.RoomService;
@@ -13,6 +14,8 @@ import com.chat.service.UserService;
 import com.chat.service.AiAssistantService;
 import com.chat.service.AiConversationService;
 import com.chat.service.AiChatService;
+import com.chat.service.MentionService;
+import com.chat.vo.MentionVO;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +59,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private AiChatService aiChatService;
+
+    @Autowired
+    private MentionService mentionService;
 
     @Autowired
     private LocalProperties localProperties;
@@ -179,6 +185,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 break;
             case "ai:history":
                 handleAiHistory(session, event.getData());
+                break;
+            case "mention:send":
+                handleMentionSend(session, event.getData());
+                break;
+            case "mention:read":
+                handleMentionRead(session, event.getData());
+                break;
+            case "mention:unread:list":
+                handleMentionUnreadList(session, event.getData());
                 break;
         }
     }
@@ -939,6 +954,107 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             "conversationId", String.valueOf(conversationId),
             "messages", messages
         )));
+    }
+
+    private void handleMentionSend(WebSocketSession session, Map<String, Object> data) throws IOException {
+        Long roomId = parseLongId(data.get("roomId"));
+        String content = (String) data.get("content");
+        Long senderId = sessionUserMap.get(session.getId());
+        Boolean mentionAll = (Boolean) data.get("mentionAll");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> mentionList = (List<Map<String, Object>>) data.get("mentions");
+
+        if (senderId == null) {
+            logger.warn("发送@消息失败：未找到发送者sessionId={}", session.getId());
+            return;
+        }
+
+        Message savedMessage = messageService.sendMessage(roomId, senderId, content, "text");
+        String senderName = messageService.getSenderName(senderId);
+
+        List<Long> mentionedUserIds = new ArrayList<>();
+        if (mentionList != null) {
+            for (Map<String, Object> mentionData : mentionList) {
+                Long userId = parseLongId(mentionData.get("userId"));
+                if (userId != null) {
+                    mentionedUserIds.add(userId);
+                }
+            }
+        }
+
+        boolean isMentionAll = Boolean.TRUE.equals(mentionAll);
+        List<Mention> mentions = mentionService.createMentions(
+            savedMessage.getId(), roomId, senderId, mentionedUserIds, isMentionAll);
+
+        Event receiveEvent = new Event("message:new", Map.of(
+                "id", String.valueOf(savedMessage.getId()),
+                "roomId", String.valueOf(roomId),
+                "senderId", String.valueOf(senderId),
+                "senderName", senderName,
+                "content", content,
+                "type", "text",
+                "seq", savedMessage.getSeq(),
+                "timestamp", savedMessage.getTimestamp()));
+        broadcastToRoomMembers(roomId, receiveEvent);
+
+        for (Mention mention : mentions) {
+            Event mentionEvent = new Event("mention:received", Map.of(
+                    "id", String.valueOf(mention.getId()),
+                    "messageId", String.valueOf(mention.getMessageId()),
+                    "roomId", String.valueOf(roomId),
+                    "senderId", String.valueOf(senderId),
+                    "senderName", senderName,
+                    "content", content,
+                    "mentionedUserId", mention.getMentionedUserId() != null ?
+                        String.valueOf(mention.getMentionedUserId()) : "",
+                    "isAll", mention.isAll(),
+                    "timestamp", mention.getCreatedAt()));
+
+            if (mention.isAll()) {
+                broadcastToRoomMembers(roomId, mentionEvent, session.getId());
+            } else {
+                Long mentionedUserId = mention.getMentionedUserId();
+                String mentionedSessionId = userSessionMap.get(mentionedUserId);
+                if (mentionedSessionId != null) {
+                    sendToSession(mentionedSessionId, mentionEvent);
+                    mentionService.incrementUnreadCount(mentionedUserId, roomId);
+                }
+            }
+        }
+    }
+
+    private void handleMentionRead(WebSocketSession session, Map<String, Object> data) throws IOException {
+        Long roomId = parseLongId(data.get("roomId"));
+        Long userId = sessionUserMap.get(session.getId());
+
+        if (userId == null) {
+            logger.warn("标记@消息已读失败：未找到用户sessionId={}", session.getId());
+            return;
+        }
+
+        mentionService.markMentionsAsRead(userId, roomId);
+    }
+
+    private void handleMentionUnreadList(WebSocketSession session, Map<String, Object> data) throws IOException {
+        Long roomId = parseLongId(data.get("roomId"));
+        Long userId = sessionUserMap.get(session.getId());
+
+        if (userId == null) {
+            logger.warn("获取未读@消息失败：未找到用户sessionId={}", session.getId());
+            return;
+        }
+
+        List<MentionVO> unreadMentions = mentionService.getUnreadMentions(userId, roomId);
+        long unreadCount = mentionService.getUnreadMentionCount(userId, roomId);
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("roomId", String.valueOf(roomId));
+        responseData.put("count", unreadCount);
+        responseData.put("mentions", unreadMentions);
+
+        Event responseEvent = new Event("mention:unread:list:response", responseData);
+        sendToSession(session.getId(), responseEvent);
     }
 
     // 数据模型类
