@@ -37,6 +37,9 @@ public class AvatarService {
     @Autowired
     private AiAssistantRepository aiAssistantRepository;
 
+    @Autowired
+    private com.chat.repository.RoomRepository roomRepository;
+
     @Value("${server.port:8081}")
     private int configuredServerPort;
 
@@ -144,6 +147,49 @@ public class AvatarService {
     public void cancelAiAvatar(String tempPath) {
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
         uploadUtil.deleteTempFile(tempPath);
+    }
+
+    /**
+     * 上传群聊头像到临时目录（第一阶段）
+     */
+    public String uploadRoomAvatarTemp(Long roomId, MultipartFile file) throws IOException {
+        validateFile(file);
+        LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
+        return uploadUtil.uploadToTemp(file);
+    }
+
+    /**
+     * 确认群聊头像（第二阶段）
+     */
+    public String confirmRoomAvatar(Long roomId, String tempPath,
+                                     String scheme, String serverName, int serverPort) {
+        LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
+
+        Optional<com.chat.entity.Room> roomOpt = roomRepository.findById(roomId);
+        if (roomOpt.isEmpty()) {
+            throw new RuntimeException("房间不存在: " + roomId);
+        }
+        com.chat.entity.Room room = roomOpt.get();
+
+        String oldAvatarUrl = room.getAvatarUrl();
+        if (oldAvatarUrl != null && !oldAvatarUrl.isBlank()) {
+            uploadUtil.deleteFile(oldAvatarUrl);
+        }
+
+        int resolvedPort = resolvePort(serverPort);
+        String relativeUrl;
+        try {
+            relativeUrl = uploadUtil.moveFromTemp(tempPath, AVATAR_SUB_DIR);
+        } catch (IOException e) {
+            throw new RuntimeException("移动群聊头像文件失败", e);
+        }
+        String absoluteUrl = uploadUtil.toAbsoluteFileUrl(relativeUrl, scheme, serverName, resolvedPort);
+
+        room.setAvatarUrl(absoluteUrl);
+        roomRepository.save(room);
+        log.info("群聊头像确认成功 - roomId: {}, url: {}", roomId, absoluteUrl);
+
+        return absoluteUrl;
     }
 
     private void validateFile(MultipartFile file) {
