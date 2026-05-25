@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import FileUploadButton from '@/components/FileUploadButton.vue'
+import MentionInput from './MentionInput.vue'
 import { formatFileSize, getFileIcon, isImageFile } from '@/api/file'
 import { emojiCategories } from '@/config/emojis'
+
+interface User {
+  userId: string
+  username: string
+}
 
 interface PendingAttachment {
   id: string
@@ -14,13 +20,16 @@ interface PendingAttachment {
 const props = defineProps<{
   isDark: boolean
   disabled: boolean
+  onlineUsers: User[]
 }>()
 
 const emit = defineEmits<{
-  send: [content: string]
+  send: [content: string, mentions: User[], mentionAll: boolean]
   sendFiles: [attachments: PendingAttachment[]]
   error: [message: string]
 }>()
+
+const mentionInputRef = ref<InstanceType<typeof MentionInput> | null>(null)
 
 const newMessage = ref('')
 const showEmojiPicker = ref(false)
@@ -74,23 +83,23 @@ const closeAttachmentPreview = () => { previewingAttachment.value = null }
 
 const insertEmoji = (emoji: string) => { newMessage.value += emoji }
 
-const handleSendMessage = () => {
-  const content = newMessage.value.trim()
-  if (content) {
-    emit('send', content)
-    newMessage.value = ''
-  }
+const handleMentionSend = (content: string, mentions: User[], mentionAll: boolean) => {
+  emit('send', content, mentions, mentionAll)
   showEmojiPicker.value = false
   if (pendingAttachments.value.length > 0) {
     emit('sendFiles', [...pendingAttachments.value])
   }
 }
 
-const handlePasteUpload = async (event: ClipboardEvent) => {
-  const files = Array.from(event.clipboardData?.files || []).filter(f => f.type.startsWith('image/'))
-  if (files.length === 0) return
-  event.preventDefault()
-  await fileUploadButtonRef.value?.queueFiles(files)
+const handleSendButtonClick = () => {
+  const content = newMessage.value.trim()
+  if (content) {
+    handleMentionSend(content, [], false)
+    newMessage.value = ''
+  }
+  if (pendingAttachments.value.length > 0) {
+    emit('sendFiles', [...pendingAttachments.value])
+  }
 }
 
 const uploadFiles = async (files: File[] | FileList) => {
@@ -196,19 +205,18 @@ defineExpose({ clearPendingAttachments, uploadFiles, removeSentAttachments: (ids
       />
 
       <div class="flex-1 relative">
-        <input
+        <MentionInput
+          ref="mentionInputRef"
           v-model="newMessage"
-          @paste="handlePasteUpload"
-          @keyup.enter="handleSendMessage"
-          type="text"
-          placeholder="输入消息"
-          class="w-full px-3 py-2.5 bg-transparent border border-[#E5E5E5] rounded-xl text-sm focus:outline-none focus:border-[#18181B] focus:ring-2 focus:ring-[#18181B]/10 transition-all duration-200 input-glow"
-          :class="isDark ? 'border-gray-700 text-gray-200 placeholder-gray-500 bg-gray-800/50' : 'border-gray-200 text-gray-700 placeholder-gray-400'"
+          :users="onlineUsers"
+          :is-dark="isDark"
+          :disabled="disabled"
+          @send="handleMentionSend"
         />
       </div>
 
       <button
-        @click="handleSendMessage"
+        @click="handleSendButtonClick"
         :disabled="!canSend"
         class="w-10 h-10 bg-[#18181B] hover:bg-[#27272A] text-white flex items-center justify-center transition-all duration-200 rounded-xl btn-press disabled:opacity-40"
         :class="isDark ? 'disabled:bg-gray-800' : 'disabled:bg-gray-200'"

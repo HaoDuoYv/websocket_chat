@@ -27,6 +27,11 @@ interface PendingAttachment {
   isImage: boolean
 }
 
+interface User {
+  userId: string
+  username: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const currentRoomId = ref(route.params.chatId as string)
@@ -91,7 +96,7 @@ onBeforeRouteUpdate((to, from, next) => {
   next()
 })
 
-const handleSendText = (content: string) => {
+const handleSendText = (content: string, _mentions: User[], _mentionAll: boolean) => {
   if (!user.value || !roomId.value) return
   sendMessage(roomId.value, content, user.value.userId)
 }
@@ -250,6 +255,7 @@ const openFilePreview = (file: { fileName: string; fileSize: number; fileUrl: st
         ref="messageInputRef"
         :is-dark="isDarkTheme"
         :disabled="isSendingFiles"
+        :online-users="onlineUsers"
         @send="handleSendText"
         @send-files="handleSendFiles"
         @error="showUploadError"
