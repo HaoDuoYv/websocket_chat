@@ -68,6 +68,7 @@ export const useChatStore = defineStore('chat', () => {
   const lastMessage = ref<Message | null>(null)
   const lastInviteResult = ref<InviteResult | null>(null)
   const lastBannedResult = ref<{ message: string } | null>(null)
+  const lastRenamedResult = ref<{ userId: string; username: string } | null>(null)
   const lastRoomMemberLeft = ref<RoomMemberLeftEvent | null>(null)
   const lastPrivateRoomCreated = ref<{ id: string; name: string; type: string } | null>(null)
   const roomLastSeq = ref<Record<string, number>>({})
@@ -142,6 +143,7 @@ export const useChatStore = defineStore('chat', () => {
     lastMessage.value = null
     lastInviteResult.value = null
     lastBannedResult.value = null
+    lastRenamedResult.value = null
     lastRoomMemberLeft.value = null
     lastPrivateRoomCreated.value = null
     roomLastSeq.value = new Map() as any
@@ -182,6 +184,7 @@ export const useChatStore = defineStore('chat', () => {
     lastMessage,
     lastInviteResult,
     lastBannedResult,
+    lastRenamedResult,
     lastRoomMemberLeft,
     lastPrivateRoomCreated,
     roomLastSeq,

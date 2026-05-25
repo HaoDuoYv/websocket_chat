@@ -42,6 +42,7 @@ export function useWebSocket() {
     lastMessage,
     lastInviteResult,
     lastBannedResult,
+    lastRenamedResult,
     lastRoomMemberLeft,
     lastPrivateRoomCreated,
     roomLastSeq,
@@ -259,6 +260,13 @@ export function useWebSocket() {
           message: event.data?.reason ? `账号已被封禁：${event.data.reason}` : '账号已被封禁'
         }
         disconnect()
+        break
+
+      case 'user:renamed':
+        lastRenamedResult.value = {
+          userId: String(event.data.userId),
+          username: event.data.username
+        }
         break
 
       case 'kicked':
@@ -636,6 +644,7 @@ export function useWebSocket() {
     lastMessage,
     lastInviteResult,
     lastBannedResult,
+    lastRenamedResult,
     lastRoomMemberLeft,
     lastPrivateRoomCreated,
     roomLastSeq,

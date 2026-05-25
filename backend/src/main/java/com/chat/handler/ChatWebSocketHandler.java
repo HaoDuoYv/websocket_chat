@@ -943,6 +943,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    public void notifyUserRenamed(Long userId, String newUsername) {
+        String sessionId = userSessionMap.get(userId);
+        if (sessionId == null) {
+            return;
+        }
+
+        sendToSession(sessionId, new Event("user:renamed", Map.of(
+                "userId", String.valueOf(userId),
+                "username", newUsername
+        )));
+    }
+
     // AI相关事件处理
     private void handleAiChat(WebSocketSession session, Map<String, Object> data) {
         Long userId = sessionUserMap.get(session.getId());

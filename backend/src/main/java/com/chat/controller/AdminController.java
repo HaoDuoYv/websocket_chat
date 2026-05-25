@@ -99,6 +99,7 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> renameUser(@PathVariable Long userId, @RequestBody Map<String, String> request) {
         String username = request.get("username");
         userService.renameUser(userId, username);
+        chatWebSocketHandler.notifyUserRenamed(userId, username);
         return ResponseEntity.ok(Map.of("message", "修改成功"));
     }
 

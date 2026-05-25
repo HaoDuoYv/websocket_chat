@@ -77,6 +77,7 @@ const {
   sendInviteMember,
   lastInviteResult,
   lastBannedResult,
+  lastRenamedResult,
   lastRoomMemberLeft,
   lastPrivateRoomCreated,
   readReceipts,
@@ -656,6 +657,20 @@ watch(lastBannedResult, result => {
   toast.error(result.message)
   handleLogout()
   lastBannedResult.value = null
+})
+
+watch(lastRenamedResult, result => {
+  if (!result || !user.value) return
+  // 更新本地用户数据
+  user.value = { ...user.value, username: result.username }
+  localStorage.setItem('user', JSON.stringify(user.value))
+  // 同步更新 onlineUsers 中自己的用户名
+  const selfIndex = onlineUsers.value.findIndex(u => u.userId === user.value?.userId)
+  if (selfIndex !== -1) {
+    onlineUsers.value[selfIndex] = { ...onlineUsers.value[selfIndex], username: result.username }
+  }
+  toast.info(`你的用户名已被管理员修改为：${result.username}`)
+  lastRenamedResult.value = null
 })
 
 watch(lastRoomMemberLeft, async event => {
