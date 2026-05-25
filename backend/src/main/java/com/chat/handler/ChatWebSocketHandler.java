@@ -524,15 +524,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             Room room = roomService.getOrCreatePrivateRoom(userId, targetUserId);
 
             Map<String, Object> responseData = new HashMap<>();
-            // 将 ID 转为 String 避免前端精度丢失
-            // 注意：前端 Room 接口使用 "id" 而不是 "roomId"
             responseData.put("id", String.valueOf(room.getId()));
-            // 使用 getPrivateRoomDisplayName 确保返回的是当前用户视角下对方的用户名/备注名
             responseData.put("name", roomService.getPrivateRoomDisplayName(userId, room.getId(), room.getName()));
             responseData.put("type", room.getType());
             responseData.put("createdAt", room.getCreatedAt());
 
-            // 获取对方用户名
             Optional<User> targetUser = userService.findById(targetUserId);
             if (targetUser.isPresent()) {
                 responseData.put("targetUsername", targetUser.get().getUsername());
@@ -540,6 +536,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
             Event responseEvent = new Event("room:private:created", responseData);
             sendToSession(session.getId(), responseEvent);
+
+            // 通知对方：如果对方在线，发送 room:invite 让其将房间加入列表
+            String targetSessionId = userSessionMap.get(targetUserId);
+            if (targetSessionId != null) {
+                Map<String, Object> targetRoomData = new HashMap<>();
+                targetRoomData.put("id", String.valueOf(room.getId()));
+                targetRoomData.put("name", roomService.getPrivateRoomDisplayName(targetUserId, room.getId(), room.getName()));
+                targetRoomData.put("type", room.getType());
+                targetRoomData.put("createdAt", room.getCreatedAt());
+                sendToSession(targetSessionId, new Event("room:invite", targetRoomData));
+            }
 
         } catch (RuntimeException e) {
             logger.error("发起私聊失败: {}", e.getMessage());

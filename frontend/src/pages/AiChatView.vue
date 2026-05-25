@@ -85,7 +85,7 @@
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
           </button>
-          <div class="flex items-center gap-3 cursor-pointer" @click="isAvatarDialogOpen = true">
+          <div class="flex items-center gap-3" :class="currentAssistant?.isSystem ? '' : 'cursor-pointer'" @click="!currentAssistant?.isSystem && (isAvatarDialogOpen = true)">
             <img 
               v-if="currentAssistant?.avatarUrl" 
               :src="currentAssistant.avatarUrl" 
@@ -325,7 +325,7 @@ onMounted(async () => {
   }
   
   const user = JSON.parse(userData)
-  connect(user)
+  connect(user, user.token)
   
   if (assistantId.value) {
     // 清除之前的聊天状态
