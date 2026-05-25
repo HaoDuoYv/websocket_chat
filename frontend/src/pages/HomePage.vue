@@ -189,11 +189,9 @@ const currentRoom = computed(() => {
 
 const getUserAvatarUrl = (userId: string): string => {
   if (userId === user.value?.userId) return user.value?.avatarUrl || ''
-  // 优先从在线用户获取（实时性最好）
   const found = onlineUsers.value.find(u => u.userId === userId)
   if (found?.avatarUrl) return found.avatarUrl
-  // 降级到持久化缓存（离线用户也能显示）
-  return userAvatarMap.value[userId] || ''
+  return userAvatarMap?.value?.[userId] || ''
 }
 
 const isUserOnline = (userId: string): boolean => {
