@@ -1,9 +1,11 @@
 package com.chat.service;
 
 import com.chat.entity.AiAssistant;
+import com.chat.entity.Room;
 import com.chat.entity.User;
 import com.chat.properties.LocalProperties;
 import com.chat.repository.AiAssistantRepository;
+import com.chat.repository.RoomRepository;
 import com.chat.repository.UserRepository;
 import com.chat.utils.LocalUploadUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +40,7 @@ public class AvatarService {
     private AiAssistantRepository aiAssistantRepository;
 
     @Autowired
-    private com.chat.repository.RoomRepository roomRepository;
+    private RoomRepository roomRepository;
 
     @Value("${server.port:8081}")
     private int configuredServerPort;
@@ -165,11 +167,11 @@ public class AvatarService {
                                      String scheme, String serverName, int serverPort) {
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
 
-        Optional<com.chat.entity.Room> roomOpt = roomRepository.findById(roomId);
+        Optional<Room> roomOpt = roomRepository.findById(roomId);
         if (roomOpt.isEmpty()) {
             throw new RuntimeException("房间不存在: " + roomId);
         }
-        com.chat.entity.Room room = roomOpt.get();
+        Room room = roomOpt.get();
 
         String oldAvatarUrl = room.getAvatarUrl();
         if (oldAvatarUrl != null && !oldAvatarUrl.isBlank()) {
@@ -190,6 +192,15 @@ public class AvatarService {
         log.info("群聊头像确认成功 - roomId: {}, url: {}", roomId, absoluteUrl);
 
         return absoluteUrl;
+    }
+
+    /**
+     * 取消群聊头像上传：删除临时文件
+     */
+    public void cancelRoomAvatar(String tempPath) {
+        LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
+        uploadUtil.deleteTempFile(tempPath);
+        log.info("群聊头像上传已取消，临时文件已删除: {}", tempPath);
     }
 
     private void validateFile(MultipartFile file) {
