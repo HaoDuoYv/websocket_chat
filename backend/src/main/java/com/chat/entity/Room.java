@@ -26,6 +26,9 @@ public class Room {
     @Column(name = "created_at", nullable = false)
     private Long createdAt;
 
+    @Column(name = "avatar_url", length = 512)
+    private String avatarUrl;
+
     public Room() {
     }
 
@@ -67,5 +70,13 @@ public class Room {
 
     public void setCreatedAt(Long createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 }
