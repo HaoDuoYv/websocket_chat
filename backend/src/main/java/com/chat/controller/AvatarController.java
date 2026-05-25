@@ -1,5 +1,10 @@
 package com.chat.controller;
 
+import com.chat.entity.AiAssistant;
+import com.chat.entity.Room;
+import com.chat.repository.AiAssistantRepository;
+import com.chat.repository.RoomRepository;
+import com.chat.service.AdminAuthService;
 import com.chat.service.AvatarService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,7 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/avatar")
@@ -17,6 +24,28 @@ public class AvatarController {
 
     @Autowired
     private AvatarService avatarService;
+
+    @Autowired
+    private AiAssistantRepository aiAssistantRepository;
+
+    @Autowired
+    private AdminAuthService adminAuthService;
+
+    @Autowired
+    private RoomRepository roomRepository;
+
+    private ResponseEntity<Map<String, Object>> checkSystemAssistantPermission(Long assistantId, HttpSession session) {
+        Optional<AiAssistant> opt = aiAssistantRepository.findById(assistantId);
+        if (opt.isPresent() && Boolean.TRUE.equals(opt.get().getIsSystem())) {
+            if (!adminAuthService.isLoggedIn(session)) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "success", false,
+                        "message", "系统助手头像只有管理员可以修改"
+                ));
+            }
+        }
+        return null;
+    }
 
     /**
      * 第一阶段：上传用户头像到临时目录
@@ -93,12 +122,115 @@ public class AvatarController {
     }
 
     /**
+     * 第一阶段：上传群聊头像到临时目录
+     */
+    @PostMapping("/room/{roomId}/temp")
+    public ResponseEntity<Map<String, Object>> uploadRoomAvatarTemp(
+            @PathVariable Long roomId,
+            @RequestParam("file") MultipartFile file,
+            jakarta.servlet.http.HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "message", "未登录"
+            ));
+        }
+        Optional<Room> roomOpt = roomRepository.findById(roomId);
+        if (roomOpt.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "房间不存在"
+            ));
+        }
+        if (!userId.equals(roomOpt.get().getOwnerId())) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "只有群主可以修改群头像"
+            ));
+        }
+        try {
+            String tempPath = avatarService.uploadRoomAvatarTemp(roomId, file);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "头像已上传到临时目录",
+                    "tempPath", tempPath
+            ));
+        } catch (Exception e) {
+            log.error("群聊头像临时上传失败", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 第二阶段：确认群聊头像
+     */
+    @PostMapping("/room/{roomId}/confirm")
+    public ResponseEntity<Map<String, Object>> confirmRoomAvatar(
+            @PathVariable Long roomId,
+            @RequestBody Map<String, String> request,
+            jakarta.servlet.http.HttpServletRequest httpRequest,
+            jakarta.servlet.http.HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "message", "未登录"
+            ));
+        }
+        Optional<Room> roomOpt = roomRepository.findById(roomId);
+        if (roomOpt.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "房间不存在"
+            ));
+        }
+        if (!userId.equals(roomOpt.get().getOwnerId())) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "只有群主可以修改群头像"
+            ));
+        }
+        try {
+            String tempPath = request.get("tempPath");
+            if (tempPath == null || tempPath.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "tempPath 不能为空"
+                ));
+            }
+            String url = avatarService.confirmRoomAvatar(
+                    roomId, tempPath,
+                    resolveScheme(httpRequest),
+                    resolveServerName(httpRequest),
+                    resolveServerPort(httpRequest));
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "头像确认成功",
+                    "url", url
+            ));
+        } catch (Exception e) {
+            log.error("群聊头像确认失败", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    /**
      * 第一阶段：上传AI助手头像到临时目录
      */
     @PostMapping("/ai/{assistantId}/temp")
     public ResponseEntity<Map<String, Object>> uploadAiAvatarTemp(
             @PathVariable Long assistantId,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
+        if (permCheck != null) return permCheck;
         try {
             String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
             return ResponseEntity.ok(Map.of(
@@ -122,7 +254,10 @@ public class AvatarController {
     public ResponseEntity<Map<String, Object>> confirmAiAvatar(
             @PathVariable Long assistantId,
             @RequestBody Map<String, String> request,
-            jakarta.servlet.http.HttpServletRequest httpRequest) {
+            jakarta.servlet.http.HttpServletRequest httpRequest,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
+        if (permCheck != null) return permCheck;
         try {
             String tempPath = request.get("tempPath");
             if (tempPath == null || tempPath.isBlank()) {
@@ -181,7 +316,10 @@ public class AvatarController {
     public ResponseEntity<Map<String, Object>> uploadAiAvatarLegacy(
             @PathVariable Long assistantId,
             @RequestParam("file") MultipartFile file,
-            jakarta.servlet.http.HttpServletRequest request) {
+            jakarta.servlet.http.HttpServletRequest request,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
+        if (permCheck != null) return permCheck;
         try {
             String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
             String url = avatarService.confirmAiAvatar(
