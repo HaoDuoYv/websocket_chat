@@ -165,6 +165,42 @@ const copyMessage = (content: string) => {
   navigator.clipboard.writeText(content)
 }
 
+interface Mention {
+  userId: string
+  username: string
+}
+
+const parseMentionContent = (content: string, mentions: Mention[]) => {
+  const parts: Array<{type: 'text' | 'mention', content: string, userId?: string}> = []
+  
+  const mentionPattern = /@(\S+?)(?=\s|$|[，。！？,.!?])/g
+  let match
+  let lastIndex = 0
+  
+  while ((match = mentionPattern.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({type: 'text', content: content.substring(lastIndex, match.index)})
+    }
+    
+    const username = match[1]
+    const mention = mentions.find(m => m.username === username)
+    
+    parts.push({
+      type: 'mention',
+      content: `@${username}`,
+      userId: mention?.userId
+    })
+    
+    lastIndex = match.index + match[0].length
+  }
+  
+  if (lastIndex < content.length) {
+    parts.push({type: 'text', content: content.substring(lastIndex)})
+  }
+  
+  return parts
+}
+
 const scrollToBottom = () => {
   nextTick(() => {
     if (container.value) {
@@ -304,7 +340,17 @@ defineExpose({ scrollToBottom })
                   @preview="emit('filePreview', $event)"
                 />
               </div>
-              <div v-else class="leading-relaxed">{{ message.content }}</div>
+              <div v-else class="leading-relaxed">
+                <template v-for="(part, index) in parseMentionContent(message.content, [])" :key="index">
+                  <span v-if="part.type === 'text'">{{ part.content }}</span>
+                  <span 
+                    v-else 
+                    :class="[
+                      part.userId === currentUserId ? 'mention-self' : 'mention-highlight'
+                    ]"
+                  >{{ part.content }}</span>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -380,3 +426,23 @@ defineExpose({ scrollToBottom })
     </template>
   </div>
 </template>
+
+<style scoped>
+.mention-highlight {
+  color: #1890ff;
+  background-color: rgba(24, 144, 255, 0.1);
+  padding: 0 2px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.mention-highlight:hover {
+  background-color: rgba(24, 144, 255, 0.2);
+}
+
+.mention-self {
+  color: #ff4d4f;
+  background-color: rgba(255, 77, 79, 0.1);
+  font-weight: bold;
+}
+</style>
