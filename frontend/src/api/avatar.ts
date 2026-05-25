@@ -82,6 +82,46 @@ export const cancelAvatar = async (tempPath: string): Promise<void> => {
   await axios.post(`${API_BASE_URL}/avatar/cancel`, { tempPath })
 }
 
+/** 第一阶段：群聊头像上传到临时目录 */
+export const uploadRoomAvatarTemp = async (
+  roomId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<AvatarUploadResponse> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const response = await axios.post<AvatarUploadResponse>(
+      `${API_BASE_URL}/avatar/room/${roomId}/temp`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total && onProgress) {
+            onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total))
+          }
+        }
+      }
+    )
+    return response.data
+  } catch (error: any) {
+    if (error.response?.data) return error.response.data as AvatarUploadResponse
+    throw error
+  }
+}
+
+/** 第二阶段：确认群聊头像 */
+export const confirmRoomAvatar = async (
+  roomId: string,
+  tempPath: string
+): Promise<AvatarUploadResponse> => {
+  const response = await axios.post<AvatarUploadResponse>(
+    `${API_BASE_URL}/avatar/room/${roomId}/confirm`,
+    { tempPath }
+  )
+  return response.data
+}
+
 /** 旧接口：直接上传AI助手头像 */
 export const uploadAiAvatar = async (
   assistantId: string,

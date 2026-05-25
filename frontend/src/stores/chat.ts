@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 export interface User {
   userId: string
   username: string
+  avatarUrl?: string
   isOnline?: boolean
 }
 
@@ -21,6 +22,7 @@ export interface Message {
   content: string
   senderId: string
   senderName: string
+  senderAvatarUrl?: string
   timestamp: number
   seq: number
   type?: 'text' | 'file' | 'system'
@@ -37,6 +39,7 @@ export interface Room {
   name: string
   type: 'public' | 'private'
   ownerId?: string
+  avatarUrl?: string
   createdAt: number
   lastMessage?: Message
 }

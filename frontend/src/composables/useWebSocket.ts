@@ -47,11 +47,19 @@ export function useWebSocket() {
     roomLastSeq,
     readReceipts,
     unreadMentionCount,
-    latestMention
+    latestMention,
+    roomMembers
   } = storeToRefs(store)
 
+  const sendRoomAvatarUpdated = (roomId: string, avatarUrl: string) => {
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
+    sharedSocket.send(JSON.stringify({
+      type: 'room:avatar:updated',
+      data: { roomId, avatarUrl }
+    }))
+  }
+
   const connect = (user: User, token?: string) => {
-    // 如果已连接同一用户，直接复用
     if (sharedSocket && sharedSocket.readyState === WebSocket.OPEN && currentUserId === user.userId) {
       isConnected.value = true
       return
@@ -310,6 +318,15 @@ export function useWebSocket() {
         store.setRoomMembers(event.data.members || [])
         break
 
+      case 'room:avatar:updated': {
+        const { roomId, avatarUrl } = event.data
+        const targetRoom = rooms.value.find(r => r.id === String(roomId))
+        if (targetRoom) {
+          targetRoom.avatarUrl = avatarUrl || undefined
+        }
+        break
+      }
+
       case 'message:read': {
         const readRoomId = String(event.data.roomId)
         const readUserId = String(event.data.userId)
@@ -479,7 +496,11 @@ export function useWebSocket() {
   }
 
   const loadRoomMembers = (roomId: string) => {
-    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
+    if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) {
+      console.log('WebSocket not ready for loadRoomMembers, retrying in 500ms...')
+      setTimeout(() => loadRoomMembers(roomId), 500)
+      return
+    }
     const membersEvent: WebSocketEvent = {
       type: 'room:members',
       data: { roomId }
@@ -498,7 +519,7 @@ export function useWebSocket() {
 
   const loadAiConversations = (assistantId: string) => {
     if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket not ready, cannot load AI conversations')
+      setTimeout(() => loadAiConversations(assistantId), 300)
       return
     }
     const event: WebSocketEvent = {
@@ -612,7 +633,7 @@ export function useWebSocket() {
     readReceipts,
     unreadMentionCount,
     latestMention,
-    roomMembers: store.roomMembers,
+    roomMembers,
     connect,
     sendMessage,
     sendFileMessage,
@@ -635,6 +656,7 @@ export function useWebSocket() {
     sendMentionMessage,
     markMentionsAsRead,
     loadUnreadMentions,
-    loadRoomMembers
+    loadRoomMembers,
+    sendRoomAvatarUpdated
   }
 }
