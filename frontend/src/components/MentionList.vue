@@ -57,8 +57,8 @@ watch(searchQuery, () => {
 </script>
 
 <template>
-  <div 
-    class="mention-list"
+  <div
+    class="mention-list border"
     :class="isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
     :style="{ top: position.top + 'px', left: position.left + 'px' }"
     @keydown="handleKeydown"
@@ -105,8 +105,8 @@ watch(searchQuery, () => {
 
 <style scoped>
 .mention-list {
-  position: absolute;
-  z-index: 50;
+  position: fixed;
+  z-index: 9999;
   min-width: 200px;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);

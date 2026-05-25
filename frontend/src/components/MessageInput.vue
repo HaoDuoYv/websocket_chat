@@ -92,11 +92,8 @@ const handleMentionSend = (content: string, mentions: User[], mentionAll: boolea
 }
 
 const handleSendButtonClick = () => {
-  const content = newMessage.value.trim()
-  if (content) {
-    handleMentionSend(content, [], false)
-    newMessage.value = ''
-  }
+  // 触发 MentionInput 内部的发送逻辑，确保 mentions 状态正确传递
+  mentionInputRef.value?.triggerSend()
   if (pendingAttachments.value.length > 0) {
     emit('sendFiles', [...pendingAttachments.value])
   }

@@ -11,6 +11,7 @@ com\chat\service\GomokuGameService.class
 com\chat\config\WebSocketConfig.class
 com\chat\controller\RoomController.class
 com\chat\handler\GomokuWebSocketHandler$Event.class
+com\chat\entity\MentionReadReceipt.class
 com\chat\config\DatabaseMigration.class
 com\chat\ChatApplication.class
 com\chat\repository\AiMessageRepository.class
@@ -30,6 +31,7 @@ com\chat\service\SystemMonitorService.class
 com\chat\controller\UserRemarkController.class
 com\chat\vo\SystemMetricsVO.class
 com\chat\vo\FileUploadResponse.class
+com\chat\config\OrphanFileCleaner.class
 com\chat\repository\RoomMemberRepository.class
 com\chat\vo\LogLineVO.class
 com\chat\config\AdminConfig.class
@@ -52,15 +54,18 @@ com\chat\service\UserService.class
 com\chat\entity\FileRecord.class
 com\chat\repository\MessageRepository.class
 com\chat\controller\AppController$1.class
+com\chat\repository\MentionReadReceiptRepository.class
 com\chat\service\AiAssistantService.class
 com\chat\utils\SnowflakeIdGenerator.class
 com\chat\handler\ChatWebSocketHandler.class
 com\chat\repository\AiConversationRepository.class
+com\chat\service\MentionService.class
 com\chat\service\UserRemarkService.class
 com\chat\entity\GomokuRoom$GomokuPlayer.class
 com\chat\service\GomokuGameService$MoveResult.class
 com\chat\config\CorsConfig.class
 com\chat\service\LogMonitorService.class
+com\chat\vo\MentionVO.class
 com\chat\interceptor\JwtAuthInterceptor.class
 com\chat\repository\UserRepository.class
 com\chat\service\GomokuGameService$ReconnectResult.class
@@ -68,6 +73,7 @@ com\chat\repository\UserRemarkRepository.class
 com\chat\service\AdminAuthService.class
 com\chat\entity\Room.class
 com\chat\entity\AiMessage.class
+com\chat\repository\FileRecordRepository.class
 com\chat\service\EditorDocumentService$EditorRoom.class
 com\chat\controller\AuthController.class
 com\chat\service\FileUploadService.class
@@ -75,6 +81,8 @@ com\chat\repository\AiAssistantRepository.class
 com\chat\interceptor\AdminIpInterceptor.class
 com\chat\exception\GlobalExceptionHandler.class
 com\chat\entity\AiConversation.class
+com\chat\entity\Mention.class
 com\chat\service\RoomService.class
 com\chat\controller\UserController.class
+com\chat\repository\MentionRepository.class
 com\chat\service\AvatarService.class
