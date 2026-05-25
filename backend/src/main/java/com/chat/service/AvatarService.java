@@ -11,6 +11,7 @@ import com.chat.utils.LocalUploadUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -58,6 +59,7 @@ public class AvatarService {
     /**
      * 确认用户头像（第二阶段）：从 temp 移到正式目录，删除旧头像
      */
+    @CacheEvict(value = {"users", "usersByName"}, allEntries = true)
     public String confirmUserAvatar(Long userId, String tempPath,
                                      String scheme, String serverName, int serverPort) {
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);

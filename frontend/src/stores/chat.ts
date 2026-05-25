@@ -63,6 +63,7 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<Message[]>([])
   const rooms = ref<Room[]>([])
   const onlineUsers = ref<User[]>([])
+  const userAvatarMap = ref<Record<string, string>>({})
   const unreadCounts = ref<Record<string, number>>({})
   const currentRoomId = ref<string>('')
   const lastMessage = ref<Message | null>(null)
@@ -115,6 +116,11 @@ export const useChatStore = defineStore('chat', () => {
     messages.value.push(msg)
     lastMessage.value = msg
 
+    // 缓存发送者头像
+    if (msg.senderAvatarUrl && msg.senderId) {
+      userAvatarMap.value[msg.senderId] = msg.senderAvatarUrl
+    }
+
     const roomIndex = rooms.value.findIndex(r => r.id === String(msg.roomId))
     if (roomIndex !== -1) {
       rooms.value[roomIndex].lastMessage = msg
@@ -146,6 +152,7 @@ export const useChatStore = defineStore('chat', () => {
     lastBannedResult.value = null
     lastRenamedResult.value = null
     userRenamedCounter.value = 0
+    userAvatarMap.value = {}
     lastRoomMemberLeft.value = null
     lastPrivateRoomCreated.value = null
     roomLastSeq.value = new Map() as any
@@ -173,6 +180,17 @@ export const useChatStore = defineStore('chat', () => {
 
   function setRoomMembers(members: User[]) {
     roomMembers.value = members
+    // 缓存群成员头像
+    for (const m of members) {
+      if (m.avatarUrl) userAvatarMap.value[m.userId] = m.avatarUrl
+    }
+  }
+
+  /** 缓存用户头像（来自消息、在线列表等） */
+  function cacheUserAvatar(userId: string, avatarUrl: string) {
+    if (userId && avatarUrl) {
+      userAvatarMap.value[userId] = avatarUrl
+    }
   }
 
   /** 用户改名后全局同步：消息列表、在线用户、群成员 */
@@ -208,6 +226,7 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     rooms,
     onlineUsers,
+    userAvatarMap,
     unreadCounts,
     currentRoomId,
     lastMessage,
@@ -235,6 +254,7 @@ export const useChatStore = defineStore('chat', () => {
     clearUnreadMentionCount,
     setLatestMention,
     setRoomMembers,
+    cacheUserAvatar,
     handleUserRenamed
   }
 })

@@ -187,8 +187,15 @@ const currentRoom = computed(() => {
 
 const getUserAvatarUrl = (userId: string): string => {
   if (userId === user.value?.userId) return user.value?.avatarUrl || ''
+  // 优先从在线用户获取（实时性最好）
   const found = onlineUsers.value.find(u => u.userId === userId)
-  return found?.avatarUrl || ''
+  if (found?.avatarUrl) return found.avatarUrl
+  // 降级到持久化缓存（离线用户也能显示）
+  return store.userAvatarMap[userId] || ''
+}
+
+const isUserOnline = (userId: string): boolean => {
+  return onlineUsers.value.some(u => u.userId === userId)
 }
 
 const getRoomPartnerAvatarUrl = (room: { id: string; name: string; type: string }): string => {
@@ -677,6 +684,13 @@ watch(userRenamedCounter, async () => {
     await loadRoomMembers(selectedRoomId.value, showMemberList.value)
   }
 })
+
+// 在线用户变化时缓存头像（用于离线后仍能显示）
+watch(onlineUsers, (users) => {
+  for (const u of users) {
+    if (u.avatarUrl) store.cacheUserAvatar(u.userId, u.avatarUrl)
+  }
+}, { immediate: true })
 
 watch(lastRoomMemberLeft, async event => {
   if (!event || !selectedRoomId.value || !currentRoom.value || currentRoom.value.type !== 'public') return
@@ -1903,14 +1917,20 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                   v-if="message.senderAvatarUrl"
                   :src="message.senderAvatarUrl"
                   class="w-8 h-8 rounded-full flex-shrink-0 object-cover"
-                  :class="String(message.senderId) !== user?.userId ? 'cursor-pointer' : ''"
+                  :class="[
+                    String(message.senderId) !== user?.userId ? 'cursor-pointer' : '',
+                    !isUserOnline(String(message.senderId)) && String(message.senderId) !== user?.userId ? 'grayscale opacity-60' : ''
+                  ]"
                   @click="String(message.senderId) !== user?.userId && handleAvatarClick({ userId: String(message.senderId), username: message.senderName, avatarUrl: message.senderAvatarUrl })"
                 />
                 <div
                   v-else
                   class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-medium"
                   :style="{ backgroundColor: getAvatarColor(String(message.senderId)) }"
-                  :class="String(message.senderId) !== user?.userId ? 'cursor-pointer' : ''"
+                  :class="[
+                    String(message.senderId) !== user?.userId ? 'cursor-pointer' : '',
+                    !isUserOnline(String(message.senderId)) && String(message.senderId) !== user?.userId ? 'grayscale opacity-60' : ''
+                  ]"
                   @click="String(message.senderId) !== user?.userId && handleAvatarClick({ userId: String(message.senderId), username: message.senderName })"
                 >
                   {{ getAvatarText(getMessageSenderName(String(message.senderId), message.senderName)) }}
