@@ -2287,7 +2287,14 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           :class="isDarkTheme ? 'border-gray-800' : 'border-gray-50'"
         >
           <div class="flex items-center gap-3">
+            <img
+              v-if="member.avatarUrl"
+              :src="member.avatarUrl"
+              class="w-8 h-8 rounded-full object-cover"
+              alt=""
+            />
             <div
+              v-else
               class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
               :style="{ backgroundColor: getAvatarColor(member.userId) }"
             >
