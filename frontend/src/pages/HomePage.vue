@@ -203,14 +203,22 @@ const isUserOnline = (userId: string): boolean => {
 
 const getRoomPartnerAvatarUrl = (room: { id: string; name: string; type: string }): string => {
   if (room.type !== 'private') return ''
-  // 先从消息中找对方 userId
   const partnerMsg = messages.value.find(
     m => String(m.roomId) === room.id && String(m.senderId) !== user.value?.userId
   )
   if (partnerMsg) return getUserAvatarUrl(String(partnerMsg.senderId))
-  // 备选：按房间名（对方用户名）查找
   const found = onlineUsers.value.find(u => u.username === room.name)
   return found?.avatarUrl || ''
+}
+
+const getRoomPartnerUserId = (room: { id: string; name: string; type: string }): string => {
+  if (room.type !== 'private') return ''
+  const partnerMsg = messages.value.find(
+    m => String(m.roomId) === room.id && String(m.senderId) !== user.value?.userId
+  )
+  if (partnerMsg) return String(partnerMsg.senderId)
+  const found = onlineUsers.value.find(u => u.username === room.name)
+  return found?.userId || ''
 }
 
 // 私聊对方用户信息（含头像）
@@ -1606,6 +1614,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                 v-if="room.type === 'private' && getRoomPartnerAvatarUrl(room)"
                 :src="getRoomPartnerAvatarUrl(room)"
                 class="w-10 h-10 rounded-full object-cover"
+                :class="!isUserOnline(getRoomPartnerUserId(room)) ? 'grayscale opacity-60' : ''"
               />
               <img
                 v-else-if="room.type === 'public' && room.avatarUrl"
@@ -1616,6 +1625,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                 v-else
                 class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
                 :style="{ backgroundColor: room.type === 'public' ? '#3B82F6' : '#10B981' }"
+                :class="room.type === 'private' && !isUserOnline(getRoomPartnerUserId(room)) ? 'grayscale opacity-60' : ''"
               >
                 {{ room.type === 'public' ? '群' : getAvatarText(getDisplayRoomName(room)) }}
               </div>
@@ -1629,7 +1639,12 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                 </svg>
               </div>
               <!-- 单聊在线状态指示 -->
-              <div v-else class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2" :class="isDarkTheme ? 'bg-green-500 border-[#18181B]' : 'bg-green-500 border-white'"></div>
+              <div v-if="room.type === 'private'" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2"
+                :class="[
+                  isUserOnline(getRoomPartnerUserId(room)) ? 'bg-green-500' : 'bg-gray-400',
+                  isDarkTheme ? 'border-[#18181B]' : 'border-white'
+                ]"
+              ></div>
             </div>
 
             <!-- 内容 - 极简信息 -->
@@ -1915,28 +1930,22 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                   String(message.senderId) === user?.userId ? 'flex-row-reverse' : 'flex-row'
                 ]"
               >
-                <!-- 头像（含在线状态指示） -->
-                <div class="relative flex-shrink-0" :class="String(message.senderId) !== user?.userId ? 'cursor-pointer' : ''"
-                  @click="String(message.senderId) !== user?.userId && handleAvatarClick({ userId: String(message.senderId), username: message.senderName, avatarUrl: message.senderAvatarUrl })">
-                  <img
-                    v-if="message.senderAvatarUrl"
-                    :src="message.senderAvatarUrl"
-                    class="w-8 h-8 rounded-full object-cover"
-                    :class="!isUserOnline(String(message.senderId)) && String(message.senderId) !== user?.userId ? 'grayscale opacity-60' : ''"
-                  />
-                  <div
-                    v-else
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                    :style="{ backgroundColor: getAvatarColor(String(message.senderId)) }"
-                    :class="!isUserOnline(String(message.senderId)) && String(message.senderId) !== user?.userId ? 'grayscale opacity-60' : ''"
-                  >
-                    {{ getAvatarText(getMessageSenderName(String(message.senderId), message.senderName)) }}
-                  </div>
-                  <div
-                    v-if="String(message.senderId) !== user?.userId"
-                    class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2"
-                    :class="isUserOnline(String(message.senderId)) ? 'bg-green-500 border-white dark:border-[#18181B]' : 'bg-gray-400 border-white dark:border-[#18181B]'"
-                  ></div>
+                <!-- 头像 -->
+                <img
+                  v-if="message.senderAvatarUrl"
+                  :src="message.senderAvatarUrl"
+                  class="w-8 h-8 rounded-full flex-shrink-0 object-cover"
+                  :class="String(message.senderId) !== user?.userId ? 'cursor-pointer' : ''"
+                  @click="String(message.senderId) !== user?.userId && handleAvatarClick({ userId: String(message.senderId), username: message.senderName, avatarUrl: message.senderAvatarUrl })"
+                />
+                <div
+                  v-else
+                  class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-medium"
+                  :style="{ backgroundColor: getAvatarColor(String(message.senderId)) }"
+                  :class="String(message.senderId) !== user?.userId ? 'cursor-pointer' : ''"
+                  @click="String(message.senderId) !== user?.userId && handleAvatarClick({ userId: String(message.senderId), username: message.senderName })"
+                >
+                  {{ getAvatarText(getMessageSenderName(String(message.senderId), message.senderName)) }}
                 </div>
 
                 <!-- 消息内容 -->
