@@ -1,6 +1,7 @@
 package com.chat.interceptor;
 
 import com.chat.utils.JwtUtil;
+import com.chat.service.UserService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,9 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private UserService userService;
+
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
@@ -32,6 +36,12 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
             Long userId = jwtUtil.getUserId(claims);
             String username = jwtUtil.getUsername(claims);
             int tokenVersion = jwtUtil.getTokenVersion(claims);
+
+            // 检查用户是否被封禁
+            if (userService.findById(userId).map(u -> u.isBanned()).orElse(false)) {
+                return false;
+            }
+
             attributes.put("userId", userId);
             attributes.put("username", username);
             attributes.put("tokenVersion", tokenVersion);

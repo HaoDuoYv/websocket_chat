@@ -263,6 +263,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
+        // 检查发送者是否被封禁
+        if (userService.findById(senderId).map(User::isBanned).orElse(false)) {
+            sendToSession(session.getId(), new Event("user:banned", Map.of("reason", "")));
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+
         // 保存消息到数据库
         Message savedMessage = messageService.sendMessage(roomId, senderId, content, "text");
         String senderName = messageService.getSenderName(senderId);
@@ -297,6 +304,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         if (senderId == null) {
             logger.warn("发送文件消息失败：未找到发送者 sessionId={}", session.getId());
+            return;
+        }
+
+        // 检查发送者是否被封禁
+        if (userService.findById(senderId).map(User::isBanned).orElse(false)) {
+            sendToSession(session.getId(), new Event("user:banned", Map.of("reason", "")));
+            session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
 

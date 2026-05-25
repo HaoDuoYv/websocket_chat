@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { CSSProperties } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import LoginForm from '@/components/LoginForm.vue'
 import CreateGroupDialog from '@/components/CreateGroupDialog.vue'
 import FileMessage from '@/components/FileMessage.vue'
@@ -59,6 +59,7 @@ const isDarkTheme = ref(localStorage.getItem('theme') === 'dark')
 const isProjectNoticeOpen = ref(false)
 const hasShownProjectNotice = ref(false)
 const router = useRouter()
+const route = useRoute()
 const aiStore = useAiStore()
 const {
   connect,
@@ -691,6 +692,13 @@ const dismissProjectNotice = () => {
 }
 
 onMounted(() => {
+  // 检查是否因封禁被重定向
+  const bannedMsg = route.query.banned as string
+  if (bannedMsg) {
+    toast.error(decodeURIComponent(bannedMsg))
+    router.replace('/login')
+  }
+
   const userData = localStorage.getItem('user')
   if (userData) {
     user.value = JSON.parse(userData)
