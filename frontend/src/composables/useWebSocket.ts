@@ -320,9 +320,9 @@ export function useWebSocket() {
 
       case 'room:avatar:updated': {
         const { roomId, avatarUrl } = event.data
-        const targetRoom = rooms.value.find(r => r.id === String(roomId))
-        if (targetRoom) {
-          targetRoom.avatarUrl = avatarUrl || undefined
+        const roomIndex = rooms.value.findIndex(r => r.id === String(roomId))
+        if (roomIndex !== -1) {
+          rooms.value[roomIndex] = { ...rooms.value[roomIndex], avatarUrl: avatarUrl || undefined }
         }
         break
       }

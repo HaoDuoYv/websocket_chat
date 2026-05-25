@@ -115,11 +115,16 @@ export const confirmRoomAvatar = async (
   roomId: string,
   tempPath: string
 ): Promise<AvatarUploadResponse> => {
-  const response = await axios.post<AvatarUploadResponse>(
-    `${API_BASE_URL}/avatar/room/${roomId}/confirm`,
-    { tempPath }
-  )
-  return response.data
+  try {
+    const response = await axios.post<AvatarUploadResponse>(
+      `${API_BASE_URL}/avatar/room/${roomId}/confirm`,
+      { tempPath }
+    )
+    return response.data
+  } catch (error: any) {
+    if (error.response?.data) return error.response.data as AvatarUploadResponse
+    throw error
+  }
 }
 
 /** 旧接口：直接上传AI助手头像 */
