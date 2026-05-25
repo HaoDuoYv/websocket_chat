@@ -12,7 +12,7 @@ import AvatarUpload from '@/components/AvatarUpload.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useAiStore } from '@/stores/ai'
 import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
-import { uploadUserAvatar } from '@/api/avatar'
+import { uploadUserAvatar, uploadRoomAvatarTemp, confirmRoomAvatar } from '@/api/avatar'
 import { useToast } from '@/composables/useToast'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import { getUserRemarks, saveUserRemark } from '@/api/userRemark'
@@ -79,6 +79,7 @@ const {
   lastRoomMemberLeft,
   lastPrivateRoomCreated,
   readReceipts,
+  sendRoomAvatarUpdated,
 } = useWebSocket()
 
 const systemAssistant = computed(() => aiStore.systemAssistant)
@@ -130,6 +131,12 @@ const isProfileDialogOpen = ref(false)
 const avatarUploadRef = ref<InstanceType<typeof AvatarUpload> | null>(null)
 const isUploadingAvatar = ref(false)
 
+const isUserProfileDialogOpen = ref(false)
+const selectedUserProfile = ref<{ userId: string; username: string; avatarUrl?: string } | null>(null)
+const isRoomAvatarDialogOpen = ref(false)
+const roomAvatarUploadRef = ref<InstanceType<typeof AvatarUpload> | null>(null)
+const isUploadingRoomAvatar = ref(false)
+
 const filteredRooms = computed(() => {
   if (!searchQuery.value.trim()) return rooms.value
   const query = searchQuery.value.toLowerCase()
@@ -174,6 +181,38 @@ const currentRoom = computed(() => {
   return rooms.value.find(r => r.id === selectedRoomId.value)
 })
 
+const getUserAvatarUrl = (userId: string): string => {
+  if (userId === user.value?.userId) return user.value?.avatarUrl || ''
+  const found = onlineUsers.value.find(u => u.userId === userId)
+  return found?.avatarUrl || ''
+}
+
+const getRoomPartnerAvatarUrl = (room: { id: string; name: string; type: string }): string => {
+  if (room.type !== 'private') return ''
+  // 先从消息中找对方 userId
+  const partnerMsg = messages.value.find(
+    m => String(m.roomId) === room.id && String(m.senderId) !== user.value?.userId
+  )
+  if (partnerMsg) return getUserAvatarUrl(String(partnerMsg.senderId))
+  // 备选：按房间名（对方用户名）查找
+  const found = onlineUsers.value.find(u => u.username === room.name)
+  return found?.avatarUrl || ''
+}
+
+// 私聊对方用户信息（含头像）
+const privatePartner = computed(() => {
+  if (!currentRoom.value || currentRoom.value.type !== 'private') return null
+  // 从消息中找到对方的 senderId
+  const partnerMsg = messages.value.find(
+    m => String(m.roomId) === selectedRoomId.value && String(m.senderId) !== user.value?.userId
+  )
+  if (partnerMsg) {
+    return onlineUsers.value.find(u => u.userId === String(partnerMsg.senderId)) || null
+  }
+  // 备选：按房间名（对方用户名）查找
+  return onlineUsers.value.find(u => u.username === currentRoom.value!.name) || null
+})
+
 const roomMessages = computed(() => {
   if (!selectedRoomId.value) return []
   return messages.value
@@ -181,7 +220,8 @@ const roomMessages = computed(() => {
     .sort((a, b) => a.seq - b.seq)
     .map(message => ({
       ...message,
-      senderName: getMessageSenderName(String(message.senderId), message.senderName)
+      senderName: getMessageSenderName(String(message.senderId), message.senderName),
+      senderAvatarUrl: message.senderAvatarUrl || getUserAvatarUrl(String(message.senderId))
     }))
 })
 
@@ -855,6 +895,67 @@ const handleLogout = () => {
   selectedRoomId.value = null
 }
 
+const handleAvatarClick = (data: { userId: string; username: string; avatarUrl?: string }) => {
+  selectedUserProfile.value = data
+  isUserProfileDialogOpen.value = true
+}
+
+const closeUserProfileDialog = () => {
+  isUserProfileDialogOpen.value = false
+  selectedUserProfile.value = null
+}
+
+const handleStartPrivateChatFromProfile = () => {
+  if (!selectedUserProfile.value) return
+  handleContactClick({
+    userId: selectedUserProfile.value.userId,
+    username: selectedUserProfile.value.username
+  })
+  closeUserProfileDialog()
+}
+
+const handleRoomAvatarUpload = async (file: File) => {
+  if (!currentRoom.value || !isRoomOwner.value) return
+
+  isUploadingRoomAvatar.value = true
+  roomAvatarUploadRef.value?.setUploading(true)
+
+  try {
+    const tempResp = await uploadRoomAvatarTemp(
+      currentRoom.value.id,
+      file,
+      (progress) => {
+        roomAvatarUploadRef.value?.setProgress(progress)
+      }
+    )
+
+    if (!tempResp.success || !tempResp.tempPath) {
+      toast.error(tempResp.message || '头像上传失败')
+      return
+    }
+
+    const confirmResp = await confirmRoomAvatar(currentRoom.value.id, tempResp.tempPath)
+
+    if (confirmResp.success) {
+      const roomIndex = rooms.value.findIndex(r => r.id === currentRoom.value!.id)
+      if (roomIndex !== -1) {
+        rooms.value[roomIndex] = { ...rooms.value[roomIndex], avatarUrl: confirmResp.url }
+      }
+      sendRoomAvatarUpdated(currentRoom.value.id, confirmResp.url!)
+      toast.success('群头像更新成功')
+      isRoomAvatarDialogOpen.value = false
+    } else {
+      toast.error(confirmResp.message || '头像确认失败')
+    }
+  } catch (error: any) {
+    toast.error(error?.message || '头像上传失败')
+  } finally {
+    isUploadingRoomAvatar.value = false
+    roomAvatarUploadRef.value?.setUploading(false)
+    roomAvatarUploadRef.value?.setProgress(0)
+  }
+}
+
 const handleAvatarUpload = async (file: File) => {
   if (!user.value) return
   
@@ -874,7 +975,11 @@ const handleAvatarUpload = async (file: File) => {
       // Update user data
       user.value = { ...user.value, avatarUrl: response.url }
       localStorage.setItem('user', JSON.stringify(user.value))
-      
+      // 同步更新 onlineUsers 中自己的头像，使消息列表实时生效
+      const selfIndex = onlineUsers.value.findIndex(u => u.userId === user.value?.userId)
+      if (selfIndex !== -1) {
+        onlineUsers.value[selfIndex] = { ...onlineUsers.value[selfIndex], avatarUrl: response.url }
+      }
       toast.success('头像更新成功')
     } else {
       toast.error(response.message || '头像上传失败')
@@ -1451,7 +1556,18 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           >
             <!-- 头像 - 简约圆形 -->
             <div class="relative">
+              <img
+                v-if="room.type === 'private' && getRoomPartnerAvatarUrl(room)"
+                :src="getRoomPartnerAvatarUrl(room)"
+                class="w-10 h-10 rounded-full object-cover"
+              />
+              <img
+                v-else-if="room.type === 'public' && room.avatarUrl"
+                :src="room.avatarUrl"
+                class="w-10 h-10 rounded-full object-cover"
+              />
               <div
+                v-else
                 class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
                 :style="{ backgroundColor: room.type === 'public' ? '#3B82F6' : '#10B981' }"
               >
@@ -1602,9 +1718,24 @@ const isRoomReadByOthers = (roomId: string): boolean => {
         <header class="px-6 py-4 border-b flex items-center justify-between" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-50'">
           <div class="flex items-center gap-3">
             <div class="relative">
+              <img
+                v-if="isGroupChat && currentRoom?.avatarUrl"
+                :src="currentRoom.avatarUrl"
+                class="w-9 h-9 rounded-full object-cover"
+                :class="isRoomOwner ? 'cursor-pointer' : ''"
+                @click="isRoomOwner && (isRoomAvatarDialogOpen = true)"
+              />
+              <img
+                v-else-if="!isGroupChat && privatePartner?.avatarUrl"
+                :src="privatePartner.avatarUrl"
+                class="w-9 h-9 rounded-full object-cover"
+              />
               <div
+                v-else
                 class="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-medium"
                 :style="{ backgroundColor: isGroupChat ? '#3B82F6' : '#10B981' }"
+                :class="isGroupChat && isRoomOwner ? 'cursor-pointer' : ''"
+                @click="isGroupChat && isRoomOwner && (isRoomAvatarDialogOpen = true)"
               >
                 {{ isGroupChat ? '群' : getAvatarText(currentRoom?.name || '') }}
               </div>
@@ -1733,9 +1864,19 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                 ]"
               >
                 <!-- 头像 -->
+                <img
+                  v-if="message.senderAvatarUrl"
+                  :src="message.senderAvatarUrl"
+                  class="w-8 h-8 rounded-full flex-shrink-0 object-cover"
+                  :class="String(message.senderId) !== user?.userId ? 'cursor-pointer' : ''"
+                  @click="String(message.senderId) !== user?.userId && handleAvatarClick({ userId: String(message.senderId), username: message.senderName, avatarUrl: message.senderAvatarUrl })"
+                />
                 <div
+                  v-else
                   class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-medium"
                   :style="{ backgroundColor: getAvatarColor(String(message.senderId)) }"
+                  :class="String(message.senderId) !== user?.userId ? 'cursor-pointer' : ''"
+                  @click="String(message.senderId) !== user?.userId && handleAvatarClick({ userId: String(message.senderId), username: message.senderName })"
                 >
                   {{ getAvatarText(getMessageSenderName(String(message.senderId), message.senderName)) }}
                 </div>
@@ -2397,6 +2538,129 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           <div class="px-6 py-4 border-t" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
             <button
               @click="isProfileDialogOpen = false"
+              class="w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
+              :class="isDarkTheme ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+            >
+              完成
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- 用户资料弹窗 -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="isUserProfileDialogOpen && selectedUserProfile"
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50"
+        @click.self="closeUserProfileDialog"
+      >
+        <div
+          class="w-full max-w-xs mx-4 rounded-2xl shadow-xl overflow-hidden"
+          :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white'"
+        >
+          <div class="px-6 py-6">
+            <div class="flex flex-col items-center gap-4">
+              <img
+                v-if="selectedUserProfile.avatarUrl"
+                :src="selectedUserProfile.avatarUrl"
+                class="w-20 h-20 rounded-full object-cover"
+              />
+              <div
+                v-else
+                class="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-medium"
+                :style="{ backgroundColor: getAvatarColor(selectedUserProfile.userId) }"
+              >
+                {{ getAvatarText(selectedUserProfile.username) }}
+              </div>
+              <div class="text-center">
+                <h3 class="text-lg font-medium" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">
+                  {{ getRemarkName(selectedUserProfile.userId, selectedUserProfile.username) }}
+                </h3>
+                <p class="text-xs mt-1" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">
+                  ID: {{ selectedUserProfile.userId }}
+                </p>
+                <p class="text-xs mt-2 flex items-center justify-center gap-1">
+                  <span
+                    class="w-1.5 h-1.5 rounded-full"
+                    :class="onlineUsers.some(u => u.userId === selectedUserProfile?.userId && u.isOnline !== false) ? 'bg-emerald-500' : 'bg-gray-400'"
+                  ></span>
+                  <span :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">
+                    {{ onlineUsers.some(u => u.userId === selectedUserProfile?.userId && u.isOnline !== false) ? '在线' : '离线' }}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t flex gap-2" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
+            <button
+              @click="closeUserProfileDialog"
+              class="flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              :class="isDarkTheme ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+            >
+              关闭
+            </button>
+            <button
+              @click="handleStartPrivateChatFromProfile"
+              class="flex-1 py-2.5 rounded-xl text-sm font-medium text-white transition-colors"
+              :class="isDarkTheme ? 'bg-white/10 hover:bg-white/15' : 'bg-[#18181B] hover:bg-[#27272A]'"
+            >
+              发起私聊
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- 群聊头像上传弹窗 -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="isRoomAvatarDialogOpen"
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50"
+        @click.self="isRoomAvatarDialogOpen = false"
+      >
+        <div
+          class="w-full max-w-sm mx-4 rounded-2xl shadow-xl overflow-hidden"
+          :class="isDarkTheme ? 'bg-[#27272A]' : 'bg-white'"
+        >
+          <div class="px-6 py-4 border-b" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-medium" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">更换群头像</h3>
+              <button
+                @click="isRoomAvatarDialogOpen = false"
+                class="p-1 rounded-lg transition-colors"
+                :class="isDarkTheme ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="px-6 py-6">
+            <div class="flex flex-col items-center gap-4">
+              <AvatarUpload
+                ref="roomAvatarUploadRef"
+                :model-value="currentRoom?.avatarUrl"
+                size="xl"
+                hint="点击上传新群头像（JPG/PNG/GIF/WebP，最大5MB）"
+                @upload="handleRoomAvatarUpload"
+              />
+              <div class="text-center">
+                <p class="text-lg font-medium" :class="isDarkTheme ? 'text-white' : 'text-gray-900'">
+                  {{ currentRoom?.name }}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
+            <button
+              @click="isRoomAvatarDialogOpen = false"
               class="w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
               :class="isDarkTheme ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
             >
