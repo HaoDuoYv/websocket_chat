@@ -693,6 +693,8 @@ export function useWebSocket() {
     loadRoomMembers,
     sendRoomAvatarUpdated,
     refreshRoomList,
-    userRenamedCounter: store.userRenamedCounter
+    userRenamedCounter: store.userRenamedCounter,
+    userAvatarMap: store.userAvatarMap,
+    cacheUserAvatar: store.cacheUserAvatar
   }
 }

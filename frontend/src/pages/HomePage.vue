@@ -84,6 +84,8 @@ const {
   sendRoomAvatarUpdated,
   refreshRoomList,
   userRenamedCounter,
+  userAvatarMap,
+  cacheUserAvatar,
 } = useWebSocket()
 
 const systemAssistant = computed(() => aiStore.systemAssistant)
@@ -191,7 +193,7 @@ const getUserAvatarUrl = (userId: string): string => {
   const found = onlineUsers.value.find(u => u.userId === userId)
   if (found?.avatarUrl) return found.avatarUrl
   // 降级到持久化缓存（离线用户也能显示）
-  return store.userAvatarMap[userId] || ''
+  return userAvatarMap.value[userId] || ''
 }
 
 const isUserOnline = (userId: string): boolean => {
@@ -688,7 +690,7 @@ watch(userRenamedCounter, async () => {
 // 在线用户变化时缓存头像（用于离线后仍能显示）
 watch(onlineUsers, (users) => {
   for (const u of users) {
-    if (u.avatarUrl) store.cacheUserAvatar(u.userId, u.avatarUrl)
+    if (u.avatarUrl) cacheUserAvatar(u.userId, u.avatarUrl)
   }
 }, { immediate: true })
 
