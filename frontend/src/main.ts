@@ -4,6 +4,7 @@ import axios from 'axios'
 import App from './App.vue'
 import router from './router'
 import './style.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
 
 // JWT 请求拦截器
 axios.interceptors.request.use((config) => {
