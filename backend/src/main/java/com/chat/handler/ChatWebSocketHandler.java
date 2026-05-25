@@ -195,6 +195,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             case "mention:unread:list":
                 handleMentionUnreadList(session, event.getData());
                 break;
+            case "room:members":
+                handleRoomMembers(session, event.getData());
+                break;
         }
     }
 
@@ -699,6 +702,33 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 "users", onlineUserList));
 
         sendToSession(session.getId(), userListEvent);
+    }
+
+    private void handleRoomMembers(WebSocketSession session, Map<String, Object> data) throws IOException {
+        Long roomId = parseLongId(data.get("roomId"));
+        Long userId = sessionUserMap.get(session.getId());
+
+        if (userId == null) {
+            logger.warn("获取房间成员失败：未找到用户 sessionId={}", session.getId());
+            return;
+        }
+
+        List<Long> memberIds = roomService.getRoomMemberIds(roomId);
+        List<Map<String, Object>> members = memberIds.stream()
+                .map(memberId -> userService.findById(memberId).orElse(null))
+                .filter(Objects::nonNull)
+                .map(user -> {
+                    Map<String, Object> userMap = new HashMap<>();
+                    userMap.put("userId", String.valueOf(user.getId()));
+                    userMap.put("username", user.getUsername());
+                    return userMap;
+                })
+                .collect(Collectors.toList());
+
+        Event membersEvent = new Event("room:members:response", Map.of(
+                "roomId", String.valueOf(roomId),
+                "members", members));
+        sendToSession(session.getId(), membersEvent);
     }
 
     private Map<String, Object> buildOnlineUser(Long userId) {
