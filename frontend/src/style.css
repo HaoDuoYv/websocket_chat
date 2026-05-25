@@ -223,3 +223,13 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Element Plus 紫色主题覆盖 */
+:root {
+  --el-color-primary: #7c3aed;
+  --el-color-primary-light-3: #a78bfa;
+  --el-color-primary-light-5: #c4b5fd;
+  --el-color-primary-light-7: #ddd6fe;
+  --el-color-primary-light-9: #ede9fe;
+  --el-color-primary-dark-2: #6d28d9;
+}
