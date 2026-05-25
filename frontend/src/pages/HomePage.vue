@@ -679,7 +679,7 @@ watch(lastRenamedResult, async result => {
 
 // 任何用户改名后，刷新房间列表（私聊名/群成员名同步）和群成员列表
 watch(userRenamedCounter, async () => {
-  refreshRoomList()
+  if (refreshRoomList) refreshRoomList()
   if (selectedRoomId.value && currentRoom.value?.type === 'public') {
     await loadRoomMembers(selectedRoomId.value, showMemberList.value)
   }
@@ -687,6 +687,7 @@ watch(userRenamedCounter, async () => {
 
 // 在线用户变化时缓存头像（用于离线后仍能显示）
 watch(onlineUsers, (users) => {
+  if (!cacheUserAvatar) return
   for (const u of users) {
     if (u.avatarUrl) cacheUserAvatar(u.userId, u.avatarUrl)
   }
