@@ -221,6 +221,10 @@ export function useWebSocket() {
           if (!existingIds.has(msg.id)) {
             messages.value.push(msg)
           }
+          // 缓存头像（历史消息可能包含离线用户的头像URL）
+          if (msg.senderAvatarUrl && msg.senderId) {
+            store.cacheUserAvatar(String(msg.senderId), msg.senderAvatarUrl)
+          }
         })
         store.trimMessages()
         break
@@ -315,6 +319,9 @@ export function useWebSocket() {
           syncData.messages.forEach(msg => {
             if (!existingIds.has(msg.id)) {
               messages.value.push(msg)
+            }
+            if (msg.senderAvatarUrl && msg.senderId) {
+              store.cacheUserAvatar(String(msg.senderId), msg.senderAvatarUrl)
             }
             const roomId = String(msg.roomId)
             if (!roomLastSeq.value[roomId] || msg.seq > roomLastSeq.value[roomId]) {

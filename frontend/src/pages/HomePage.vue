@@ -10,6 +10,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetRemarkDialog from '@/components/SetRemarkDialog.vue'
 import AvatarUpload from '@/components/AvatarUpload.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useChatStore } from '@/stores/chat'
 import { useAiStore } from '@/stores/ai'
 import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
 import { uploadUserAvatar, uploadRoomAvatarTemp, confirmRoomAvatar, cancelAvatar } from '@/api/avatar'
@@ -187,11 +188,13 @@ const currentRoom = computed(() => {
   return rooms.value.find(r => r.id === selectedRoomId.value)
 })
 
+const chatStore = useChatStore()
+
 const getUserAvatarUrl = (userId: string): string => {
   if (userId === user.value?.userId) return user.value?.avatarUrl || ''
   const found = onlineUsers.value.find(u => u.userId === userId)
   if (found?.avatarUrl) return found.avatarUrl
-  return userAvatarMap?.value?.[userId] || ''
+  return chatStore.userAvatarMap[userId] || ''
 }
 
 const isUserOnline = (userId: string): boolean => {
@@ -687,9 +690,8 @@ watch(userRenamedCounter, async () => {
 
 // 在线用户变化时缓存头像（用于离线后仍能显示）
 watch(onlineUsers, (users) => {
-  if (!cacheUserAvatar) return
   for (const u of users) {
-    if (u.avatarUrl) cacheUserAvatar(u.userId, u.avatarUrl)
+    if (u.avatarUrl) chatStore.cacheUserAvatar(u.userId, u.avatarUrl)
   }
 }, { immediate: true })
 
