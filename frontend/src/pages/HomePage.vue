@@ -12,7 +12,7 @@ import AvatarUpload from '@/components/AvatarUpload.vue'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useAiStore } from '@/stores/ai'
 import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
-import { uploadUserAvatar, uploadRoomAvatarTemp, confirmRoomAvatar } from '@/api/avatar'
+import { uploadUserAvatar, uploadRoomAvatarTemp, confirmRoomAvatar, cancelAvatar } from '@/api/avatar'
 import { useToast } from '@/composables/useToast'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import { getUserRemarks, saveUserRemark } from '@/api/userRemark'
@@ -920,8 +920,9 @@ const handleRoomAvatarUpload = async (file: File) => {
   isUploadingRoomAvatar.value = true
   roomAvatarUploadRef.value?.setUploading(true)
 
+  let tempResp: Awaited<ReturnType<typeof uploadRoomAvatarTemp>> | null = null
   try {
-    const tempResp = await uploadRoomAvatarTemp(
+    tempResp = await uploadRoomAvatarTemp(
       currentRoom.value.id,
       file,
       (progress) => {
@@ -937,18 +938,18 @@ const handleRoomAvatarUpload = async (file: File) => {
     const confirmResp = await confirmRoomAvatar(currentRoom.value.id, tempResp.tempPath)
 
     if (confirmResp.success) {
-      const roomIndex = rooms.value.findIndex(r => r.id === currentRoom.value!.id)
-      if (roomIndex !== -1) {
-        rooms.value[roomIndex] = { ...rooms.value[roomIndex], avatarUrl: confirmResp.url }
-      }
       sendRoomAvatarUpdated(currentRoom.value.id, confirmResp.url!)
       toast.success('群头像更新成功')
       isRoomAvatarDialogOpen.value = false
     } else {
       toast.error(confirmResp.message || '头像确认失败')
+      cancelAvatar(tempResp.tempPath).catch(() => {})
     }
   } catch (error: any) {
     toast.error(error?.message || '头像上传失败')
+    if (tempResp?.tempPath) {
+      cancelAvatar(tempResp.tempPath).catch(() => {})
+    }
   } finally {
     isUploadingRoomAvatar.value = false
     roomAvatarUploadRef.value?.setUploading(false)
@@ -2661,6 +2662,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           <div class="px-6 py-4 border-t" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
             <button
               @click="isRoomAvatarDialogOpen = false"
+              :disabled="isUploadingRoomAvatar"
               class="w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
               :class="isDarkTheme ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
             >
