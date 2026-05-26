@@ -110,8 +110,7 @@ public class AvatarController {
     @PostMapping("/user/{userId}/confirm")
     public ResponseEntity<Map<String, Object>> confirmUserAvatar(
             @PathVariable Long userId,
-            @RequestBody Map<String, String> request,
-            jakarta.servlet.http.HttpServletRequest httpRequest) {
+            @RequestBody Map<String, String> request) {
         try {
             String tempPath = request.get("tempPath");
             if (tempPath == null || tempPath.isBlank()) {
@@ -120,11 +119,7 @@ public class AvatarController {
                         "message", "tempPath 不能为空"
                 ));
             }
-            String url = avatarService.confirmUserAvatar(
-                    userId, tempPath,
-                    resolveScheme(httpRequest),
-                    resolveServerName(httpRequest),
-                    resolveServerPort(httpRequest));
+            String url = avatarService.confirmUserAvatar(userId, tempPath);
             chatWebSocketHandler.broadcastUserAvatarUpdated(userId, url);
             return ResponseEntity.ok(Map.of(
                     "success", true,
@@ -200,11 +195,7 @@ public class AvatarController {
                         "message", "tempPath 不能为空"
                 ));
             }
-            String url = avatarService.confirmRoomAvatar(
-                    roomId, tempPath,
-                    resolveScheme(httpRequest),
-                    resolveServerName(httpRequest),
-                    resolveServerPort(httpRequest));
+            String url = avatarService.confirmRoomAvatar(roomId, tempPath);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "头像确认成功",
@@ -252,7 +243,6 @@ public class AvatarController {
     public ResponseEntity<Map<String, Object>> confirmAiAvatar(
             @PathVariable Long assistantId,
             @RequestBody Map<String, String> request,
-            jakarta.servlet.http.HttpServletRequest httpRequest,
             HttpSession session) {
         ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
         if (permCheck != null) return permCheck;
@@ -264,11 +254,7 @@ public class AvatarController {
                         "message", "tempPath 不能为空"
                 ));
             }
-            String url = avatarService.confirmAiAvatar(
-                    assistantId, tempPath,
-                    resolveScheme(httpRequest),
-                    resolveServerName(httpRequest),
-                    resolveServerPort(httpRequest));
+            String url = avatarService.confirmAiAvatar(assistantId, tempPath);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "头像确认成功",
@@ -287,15 +273,10 @@ public class AvatarController {
     @PostMapping("/user/{userId}")
     public ResponseEntity<Map<String, Object>> uploadUserAvatarLegacy(
             @PathVariable Long userId,
-            @RequestParam("file") MultipartFile file,
-            jakarta.servlet.http.HttpServletRequest request) {
+            @RequestParam("file") MultipartFile file) {
         try {
             String tempPath = avatarService.uploadUserAvatarTemp(userId, file);
-            String url = avatarService.confirmUserAvatar(
-                    userId, tempPath,
-                    resolveScheme(request),
-                    resolveServerName(request),
-                    resolveServerPort(request));
+            String url = avatarService.confirmUserAvatar(userId, tempPath);
             chatWebSocketHandler.broadcastUserAvatarUpdated(userId, url);
             return ResponseEntity.ok(Map.of(
                     "success", true,
@@ -315,17 +296,12 @@ public class AvatarController {
     public ResponseEntity<Map<String, Object>> uploadAiAvatarLegacy(
             @PathVariable Long assistantId,
             @RequestParam("file") MultipartFile file,
-            jakarta.servlet.http.HttpServletRequest request,
             HttpSession session) {
         ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
         if (permCheck != null) return permCheck;
         try {
             String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
-            String url = avatarService.confirmAiAvatar(
-                    assistantId, tempPath,
-                    resolveScheme(request),
-                    resolveServerName(request),
-                    resolveServerPort(request));
+            String url = avatarService.confirmAiAvatar(assistantId, tempPath);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "头像上传成功",
@@ -338,59 +314,5 @@ public class AvatarController {
                     "message", e.getMessage()
             ));
         }
-    }
-
-    private String resolveScheme(jakarta.servlet.http.HttpServletRequest request) {
-        String forwardedProto = request.getHeader("X-Forwarded-Proto");
-        if (forwardedProto != null && !forwardedProto.isBlank()) {
-            return forwardedProto.split(",", 2)[0].trim();
-        }
-        return request.getScheme();
-    }
-
-    private String resolveServerName(jakarta.servlet.http.HttpServletRequest request) {
-        String forwardedHost = request.getHeader("X-Forwarded-Host");
-        String hostHeader = forwardedHost != null && !forwardedHost.isBlank()
-                ? forwardedHost : request.getHeader("Host");
-        if (hostHeader == null || hostHeader.isBlank()) {
-            return request.getServerName();
-        }
-        String normalizedHost = hostHeader.split(",", 2)[0].trim();
-        if (normalizedHost.startsWith("[")) {
-            int closingBracketIndex = normalizedHost.indexOf(']');
-            if (closingBracketIndex > 0) {
-                return normalizedHost.substring(1, closingBracketIndex);
-            }
-            return request.getServerName();
-        }
-        String[] hostParts = normalizedHost.split(":", 2);
-        return hostParts[0];
-    }
-
-    private int resolveServerPort(jakarta.servlet.http.HttpServletRequest request) {
-        String forwardedPort = request.getHeader("X-Forwarded-Port");
-        if (forwardedPort != null && !forwardedPort.isBlank()) {
-            return Integer.parseInt(forwardedPort.split(",", 2)[0].trim());
-        }
-        String forwardedHost = request.getHeader("X-Forwarded-Host");
-        String hostHeader = forwardedHost != null && !forwardedHost.isBlank()
-                ? forwardedHost : request.getHeader("Host");
-        if (hostHeader != null && !hostHeader.isBlank()) {
-            String normalizedHost = hostHeader.split(",", 2)[0].trim();
-            if (normalizedHost.startsWith("[")) {
-                int closingBracketIndex = normalizedHost.indexOf(']');
-                if (closingBracketIndex > 0
-                        && normalizedHost.length() > closingBracketIndex + 2
-                        && normalizedHost.charAt(closingBracketIndex + 1) == ':') {
-                    return Integer.parseInt(normalizedHost.substring(closingBracketIndex + 2));
-                }
-            } else {
-                String[] hostParts = normalizedHost.split(":", 2);
-                if (hostParts.length == 2 && !hostParts[1].isBlank()) {
-                    return Integer.parseInt(hostParts[1]);
-                }
-            }
-        }
-        return request.getServerPort();
     }
 }

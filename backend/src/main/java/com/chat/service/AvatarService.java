@@ -10,7 +10,6 @@ import com.chat.repository.UserRepository;
 import com.chat.utils.LocalUploadUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -43,9 +42,6 @@ public class AvatarService {
     @Autowired
     private RoomRepository roomRepository;
 
-    @Value("${server.port:8081}")
-    private int configuredServerPort;
-
     /**
      * 上传用户头像到临时目录（第一阶段）
      * @return temp 相对路径
@@ -60,8 +56,7 @@ public class AvatarService {
      * 确认用户头像（第二阶段）：从 temp 移到正式目录，删除旧头像
      */
     @CacheEvict(value = {"users", "usersByName"}, allEntries = true)
-    public String confirmUserAvatar(Long userId, String tempPath,
-                                     String scheme, String serverName, int serverPort) {
+    public String confirmUserAvatar(Long userId, String tempPath) {
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
 
         Optional<User> userOpt = userRepository.findById(userId);
@@ -70,27 +65,23 @@ public class AvatarService {
         }
         User user = userOpt.get();
 
-        // 删除旧头像文件
         String oldAvatarUrl = user.getAvatarUrl();
         if (oldAvatarUrl != null && !oldAvatarUrl.isBlank()) {
             uploadUtil.deleteFile(oldAvatarUrl);
         }
 
-        // 从 temp 移到正式目录
-        int resolvedPort = resolvePort(serverPort);
         String relativeUrl;
         try {
             relativeUrl = uploadUtil.moveFromTemp(tempPath, AVATAR_SUB_DIR);
         } catch (IOException e) {
             throw new RuntimeException("移动头像文件失败", e);
         }
-        String absoluteUrl = uploadUtil.toAbsoluteFileUrl(relativeUrl, scheme, serverName, resolvedPort);
 
-        user.setAvatarUrl(absoluteUrl);
+        user.setAvatarUrl(relativeUrl);
         userRepository.save(user);
-        log.info("用户头像确认成功 - userId: {}, url: {}", userId, absoluteUrl);
+        log.info("用户头像确认成功 - userId: {}, url: {}", userId, relativeUrl);
 
-        return absoluteUrl;
+        return relativeUrl;
     }
 
     /**
@@ -114,8 +105,7 @@ public class AvatarService {
     /**
      * 确认AI助手头像（第二阶段）
      */
-    public String confirmAiAvatar(Long assistantId, String tempPath,
-                                   String scheme, String serverName, int serverPort) {
+    public String confirmAiAvatar(Long assistantId, String tempPath) {
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
 
         Optional<AiAssistant> assistantOpt = aiAssistantRepository.findById(assistantId);
@@ -129,20 +119,18 @@ public class AvatarService {
             uploadUtil.deleteFile(oldAvatarUrl);
         }
 
-        int resolvedPort = resolvePort(serverPort);
         String relativeUrl;
         try {
             relativeUrl = uploadUtil.moveFromTemp(tempPath, AVATAR_SUB_DIR);
         } catch (IOException e) {
             throw new RuntimeException("移动头像文件失败", e);
         }
-        String absoluteUrl = uploadUtil.toAbsoluteFileUrl(relativeUrl, scheme, serverName, resolvedPort);
 
-        assistant.setAvatarUrl(absoluteUrl);
+        assistant.setAvatarUrl(relativeUrl);
         aiAssistantRepository.save(assistant);
-        log.info("AI助手头像确认成功 - assistantId: {}, url: {}", assistantId, absoluteUrl);
+        log.info("AI助手头像确认成功 - assistantId: {}, url: {}", assistantId, relativeUrl);
 
-        return absoluteUrl;
+        return relativeUrl;
     }
 
     /**
@@ -165,8 +153,7 @@ public class AvatarService {
     /**
      * 确认群聊头像（第二阶段）
      */
-    public String confirmRoomAvatar(Long roomId, String tempPath,
-                                     String scheme, String serverName, int serverPort) {
+    public String confirmRoomAvatar(Long roomId, String tempPath) {
         LocalUploadUtil uploadUtil = new LocalUploadUtil(localProperties);
 
         Optional<Room> roomOpt = roomRepository.findById(roomId);
@@ -180,20 +167,18 @@ public class AvatarService {
             uploadUtil.deleteFile(oldAvatarUrl);
         }
 
-        int resolvedPort = resolvePort(serverPort);
         String relativeUrl;
         try {
             relativeUrl = uploadUtil.moveFromTemp(tempPath, AVATAR_SUB_DIR);
         } catch (IOException e) {
             throw new RuntimeException("移动群聊头像文件失败", e);
         }
-        String absoluteUrl = uploadUtil.toAbsoluteFileUrl(relativeUrl, scheme, serverName, resolvedPort);
 
-        room.setAvatarUrl(absoluteUrl);
+        room.setAvatarUrl(relativeUrl);
         roomRepository.save(room);
-        log.info("群聊头像确认成功 - roomId: {}, url: {}", roomId, absoluteUrl);
+        log.info("群聊头像确认成功 - roomId: {}, url: {}", roomId, relativeUrl);
 
-        return absoluteUrl;
+        return relativeUrl;
     }
 
     /**
@@ -216,12 +201,5 @@ public class AvatarService {
         if (contentType == null || !ALLOWED_TYPES.contains(contentType)) {
             throw new RuntimeException("只支持 JPG、PNG、GIF、WebP 格式的图片");
         }
-    }
-
-    private int resolvePort(int requestPort) {
-        if (requestPort > 0 && requestPort != 80 && requestPort != 443) {
-            return requestPort;
-        }
-        return configuredServerPort;
     }
 }

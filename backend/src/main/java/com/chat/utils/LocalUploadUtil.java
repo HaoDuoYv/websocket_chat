@@ -120,6 +120,11 @@ public class LocalUploadUtil {
         if (relativePath == null || relativePath.isBlank()) return;
         String absolutePath = System.getProperty("user.dir") + File.separator + localProperties.getLocalUrl();
         String cleanPath = relativePath;
+        // 兼容旧的绝对URL：提取路径部分
+        Matcher matcher = HTTP_URL_PATTERN.matcher(cleanPath);
+        if (matcher.matches() && matcher.group(4) != null) {
+            cleanPath = matcher.group(4);
+        }
         if (cleanPath.startsWith("/files/")) {
             cleanPath = cleanPath.substring(7);
         } else if (cleanPath.startsWith("files/")) {
