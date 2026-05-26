@@ -10,6 +10,7 @@ interface Message {
   content: string
   senderId?: string
   senderName?: string
+  senderAvatarUrl?: string
   timestamp?: number
   createdAt?: number
   seq?: number

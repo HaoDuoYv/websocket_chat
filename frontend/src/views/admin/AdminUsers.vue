@@ -10,7 +10,7 @@ import {
 } from '@/api/admin'
 import UserTable from '@/components/admin/UserTable.vue'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, EditPen, CircleCloseFilled, CircleCheck, WarningFilled } from '@element-plus/icons-vue'
+import { Search, Refresh, EditPen, CircleCheck, WarningFilled } from '@element-plus/icons-vue'
 
 const users = ref<AdminUser[]>([])
 const onlineUserIds = ref<Set<string>>(new Set())

@@ -12,15 +12,6 @@ function formatMemory(mb: number): string {
   return mb + ' MB'
 }
 
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  if (days > 0) return `${days}天 ${hours}小时 ${minutes}分钟`
-  if (hours > 0) return `${hours}小时 ${minutes}分钟`
-  return `${minutes}分钟`
-}
-
 function getProgressColor(value: number): string {
   if (value > 80) return '#ef4444'
   if (value > 60) return '#f59e0b'

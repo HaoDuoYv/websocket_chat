@@ -84,9 +84,6 @@ const {
   readReceipts,
   sendRoomAvatarUpdated,
   refreshRoomList,
-  userRenamedCounter,
-  userAvatarMap,
-  cacheUserAvatar,
 } = useWebSocket()
 
 const systemAssistant = computed(() => aiStore.systemAssistant)
@@ -689,7 +686,7 @@ watch(lastRenamedResult, async result => {
 })
 
 // 任何用户改名后，刷新房间列表（私聊名/群成员名同步）和群成员列表
-watch(userRenamedCounter, async () => {
+watch(() => chatStore.userRenamedCounter, async () => {
   if (refreshRoomList) refreshRoomList()
   if (selectedRoomId.value && currentRoom.value?.type === 'public') {
     await loadRoomMembers(selectedRoomId.value, showMemberList.value)

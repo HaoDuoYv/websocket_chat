@@ -196,11 +196,9 @@ export const useChatStore = defineStore('chat', () => {
   /** 用户改名后全局同步：消息列表、在线用户、群成员 */
   function handleUserRenamed(userId: string, newUsername: string) {
     // 1. 更新所有消息中的发送者名称
-    for (const roomMsgs of Object.values(messages.value)) {
-      for (const msg of roomMsgs) {
-        if (msg.senderId === userId) {
-          msg.senderName = newUsername
-        }
+    for (const msg of messages.value) {
+      if (msg.senderId === userId) {
+        msg.senderName = newUsername
       }
     }
 
