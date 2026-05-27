@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 
 interface User {
   userId: string
@@ -11,6 +11,7 @@ const props = defineProps<{
   users: User[]
   isDark: boolean
   disabled: boolean
+  currentUserId?: string
 }>()
 
 const emit = defineEmits<{
@@ -19,158 +20,174 @@ const emit = defineEmits<{
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
+const dropdownRef = ref<HTMLDivElement | null>(null)
 const showDropdown = ref(false)
-const dropdownPos = ref({ top: 0, left: 0, width: 0 })
-const mentionStartPos = ref(-1)
 const mentionQuery = ref('')
 const selectedIndex = ref(0)
 const mentionedUsers = ref<User[]>([])
 const mentionAll = ref(false)
+const mentionStart = ref(-1)
 
-const localValue = computed({
+// 输入框的值，双向绑定
+const inputValue = computed({
   get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
+  set: (v: string) => emit('update:modelValue', v)
 })
 
-const filteredUsers = computed(() => {
+// 过滤后的用户列表（排除自己）
+const filtered = computed(() => {
   const q = mentionQuery.value.toLowerCase()
-  if (!q) return props.users
-  return props.users.filter(u => u.username.toLowerCase().includes(q))
+  let list = props.users.filter(u => u.userId !== props.currentUserId)
+  if (q) list = list.filter(u => u.username.toLowerCase().includes(q))
+  return list
 })
 
-// 所有选项：@所有人 + 过滤后的用户
-const allOptions = computed(() => [null, ...filteredUsers.value])
+// 所有可选项：@所有人 放在最前面
+const options = computed(() => {
+  return [{ userId: '__all__', username: '所有人' } as User, ...filtered.value]
+})
 
-const updateDropdownPos = () => {
-  if (!inputRef.value) return
+// 更新下拉位置（相对于输入框上方）
+const updatePos = () => {
+  if (!inputRef.value || !dropdownRef.value) return
   const rect = inputRef.value.getBoundingClientRect()
-  dropdownPos.value = {
-    top: rect.top - 4,
-    left: rect.left,
-    width: rect.width
+  const dd = dropdownRef.value
+  dd.style.position = 'fixed'
+  dd.style.bottom = (window.innerHeight - rect.top + 4) + 'px'
+  dd.style.left = rect.left + 'px'
+  dd.style.width = rect.width + 'px'
+}
+
+// 检测输入框中的 @ 触发
+const onInput = () => {
+  const el = inputRef.value
+  if (!el) return
+  const val = el.value
+  const cur = el.selectionStart ?? val.length
+  const before = val.slice(0, cur)
+  const at = before.lastIndexOf('@')
+
+  if (at >= 0 && !before.slice(at + 1).includes(' ')) {
+    mentionStart.value = at
+    mentionQuery.value = before.slice(at + 1)
+    selectedIndex.value = 0
+    showDropdown.value = true
+    nextTick(updatePos)
+  } else {
+    close()
   }
 }
 
-const viewportHeight = computed(() => window.innerHeight)
-
-const openDropdown = () => {
-  selectedIndex.value = 0
-  showDropdown.value = true
-  updateDropdownPos()
-}
-
-const closeDropdown = () => {
+const close = () => {
   showDropdown.value = false
-  mentionStartPos.value = -1
+  mentionStart.value = -1
   mentionQuery.value = ''
 }
 
-const handleInput = (e: Event) => {
-  const input = e.target as HTMLInputElement
-  const val = input.value
-  const cursor = input.selectionStart ?? val.length
+// 选择一个选项
+const pick = (opt: User) => {
+  const el = inputRef.value
+  if (!el) return
+  const val = el.value
+  const before = val.slice(0, mentionStart.value)
+  const after = val.slice(el.selectionStart ?? val.length)
+  const isAll = opt.userId === '__all__'
+  const name = isAll ? '所有人' : opt.username
+  const insert = `@${name} `
 
-  const textBefore = val.substring(0, cursor)
-  const atIdx = textBefore.lastIndexOf('@')
-
-  if (atIdx !== -1) {
-    const afterAt = textBefore.substring(atIdx + 1)
-    // @后面没有空格才触发
-    if (!afterAt.includes(' ')) {
-      mentionStartPos.value = atIdx
-      mentionQuery.value = afterAt
-      selectedIndex.value = 0
-      openDropdown()
-      return
-    }
-  }
-
-  closeDropdown()
-}
-
-const selectOption = (option: User | null) => {
-  const before = localValue.value.substring(0, mentionStartPos.value)
-  const after = localValue.value.substring(inputRef.value?.selectionStart ?? localValue.value.length)
-
-  if (option === null) {
-    localValue.value = `${before}@所有人 ${after}`
+  inputValue.value = before + insert + after
+  if (isAll) {
     mentionAll.value = true
   } else {
-    localValue.value = `${before}@${option.username} ${after}`
-    if (!mentionedUsers.value.find(u => u.userId === option.userId)) {
-      mentionedUsers.value.push(option)
+    if (!mentionedUsers.value.find(u => u.userId === opt.userId)) {
+      mentionedUsers.value.push(opt)
     }
   }
-
-  closeDropdown()
+  close()
   nextTick(() => {
-    inputRef.value?.focus()
-    // 把光标移到插入内容之后
-    const pos = before.length + (option === null ? '@所有人 '.length : `@${option.username} `.length)
-    inputRef.value?.setSelectionRange(pos, pos)
+    el.focus()
+    const pos = before.length + insert.length
+    el.setSelectionRange(pos, pos)
   })
 }
 
-const handleKeydown = (e: KeyboardEvent) => {
+// 键盘事件
+const onKeydown = (e: KeyboardEvent) => {
   if (showDropdown.value) {
+    const len = options.value.length
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      selectedIndex.value = Math.min(selectedIndex.value + 1, allOptions.value.length - 1)
+      selectedIndex.value = (selectedIndex.value + 1) % len
+      scrollToSelected()
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
+      selectedIndex.value = (selectedIndex.value - 1 + len) % len
+      scrollToSelected()
     } else if (e.key === 'Enter') {
       e.preventDefault()
       e.stopPropagation()
-      selectOption(allOptions.value[selectedIndex.value] ?? null)
+      pick(options.value[selectedIndex.value])
     } else if (e.key === 'Escape') {
       e.preventDefault()
-      closeDropdown()
+      close()
     }
     return
   }
-
-  if (e.key === 'Enter') {
+  if (e.key === 'Enter' && !e.isComposing) {
     e.preventDefault()
-    handleSend()
+    doSend()
   }
 }
 
-const handleSend = () => {
-  const content = localValue.value.trim()
+const scrollToSelected = () => {
+  nextTick(() => {
+    const dd = dropdownRef.value
+    if (!dd) return
+    const item = dd.querySelector('[data-selected="true"]') as HTMLElement
+    if (item) item.scrollIntoView({ block: 'nearest' })
+  })
+}
+
+// 发送
+const doSend = () => {
+  const content = inputValue.value.trim()
   if (!content) return
   emit('send', content, mentionedUsers.value, mentionAll.value)
-  localValue.value = ''
+  inputValue.value = ''
   mentionedUsers.value = []
   mentionAll.value = false
 }
 
-// 点击外部关闭
-const handleClickOutside = (_e: MouseEvent) => {
-  if (showDropdown.value) closeDropdown()
+// 全局 mousedown 关闭下拉（排除下拉菜单自身和输入框）
+const onDocMouseDown = (e: MouseEvent) => {
+  if (!showDropdown.value) return
+  const t = e.target as Node
+  if (inputRef.value?.contains(t)) return
+  if (dropdownRef.value?.contains(t)) return
+  close()
 }
 
-onMounted(() => document.addEventListener('mousedown', handleClickOutside))
-onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
+document.addEventListener('mousedown', onDocMouseDown)
+onBeforeUnmount(() => document.removeEventListener('mousedown', onDocMouseDown))
 
 const clearMentions = () => {
   mentionedUsers.value = []
   mentionAll.value = false
 }
 
-defineExpose({ clearMentions, triggerSend: handleSend })
+defineExpose({ clearMentions, triggerSend: doSend })
 </script>
 
 <template>
   <div class="relative w-full">
     <input
       ref="inputRef"
-      v-model="localValue"
-      @input="handleInput"
-      @keydown="handleKeydown"
+      :value="inputValue"
+      @input="(e: Event) => { inputValue = (e.target as HTMLInputElement).value; onInput() }"
+      @keydown="onKeydown"
       :disabled="disabled"
       placeholder="输入消息，@提及成员"
-      class="w-full px-3 py-2.5 bg-transparent border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all duration-200"
+      class="mention-input"
       :class="[
         isDark
           ? 'border-gray-700 text-gray-200 placeholder-gray-500 bg-gray-800/50 focus:border-gray-500 focus:ring-gray-700/30'
@@ -178,35 +195,29 @@ defineExpose({ clearMentions, triggerSend: handleSend })
         disabled ? 'opacity-50 cursor-not-allowed' : ''
       ]"
     />
-
-    <!-- 下拉菜单：Teleport 到 body，避免父容器定位干扰 -->
+    <!-- 下拉菜单：Teleport 到 body，用 inline style 确保样式生效 -->
     <Teleport to="body">
       <div
-        v-if="showDropdown && allOptions.length > 0"
-        class="mention-dropdown"
+        ref="dropdownRef"
+        v-show="showDropdown && options.length > 0"
+        class="mention-dd"
         :class="isDark ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-800'"
-        :style="{
-          position: 'fixed',
-          bottom: (viewportHeight - dropdownPos.top) + 'px',
-          left: dropdownPos.left + 'px',
-          minWidth: dropdownPos.width + 'px',
-          zIndex: 9999
-        }"
         @mousedown.prevent
       >
         <div
-          v-for="(option, idx) in allOptions"
-          :key="option ? option.userId : '__all__'"
-          class="flex items-center gap-2 px-3 py-2 cursor-pointer text-sm"
+          v-for="(opt, idx) in options"
+          :key="opt.userId"
+          :data-selected="idx === selectedIndex"
+          class="mention-item"
           :class="[
             idx === selectedIndex
               ? (isDark ? 'bg-gray-700' : 'bg-blue-50')
               : (isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50')
           ]"
-          @mousedown.prevent="selectOption(option)"
+          @mousedown.prevent="pick(opt)"
         >
-          <span class="text-base">{{ option === null ? '👥' : '👤' }}</span>
-          <span>{{ option === null ? '@所有人' : option.username }}</span>
+          <span class="mention-icon">{{ opt.userId === '__all__' ? '👥' : '👤' }}</span>
+          <span>{{ opt.userId === '__all__' ? '@所有人' : `@${opt.username}` }}</span>
         </div>
       </div>
     </Teleport>
@@ -214,12 +225,46 @@ defineExpose({ clearMentions, triggerSend: handleSend })
 </template>
 
 <style scoped>
-.mention-dropdown {
+.mention-input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: transparent;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: all 0.2s;
+}
+.mention-input:focus {
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+</style>
+
+<style>
+/* 全局样式：Teleport 到 body 的下拉菜单 */
+.mention-dd {
   border-width: 1px;
   border-style: solid;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   max-height: 220px;
   overflow-y: auto;
+  z-index: 99999;
+}
+.mention-dd .mention-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  user-select: none;
+}
+.mention-dd .mention-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 </style>

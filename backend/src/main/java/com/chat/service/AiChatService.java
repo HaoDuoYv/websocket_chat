@@ -7,6 +7,7 @@ import com.chat.repository.AiMessageRepository;
 import com.chat.utils.SnowflakeIdGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -14,6 +15,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 @Service
@@ -42,6 +45,9 @@ public class AiChatService {
 
     @Autowired
     private AiAssistantService aiAssistantService;
+
+    @Autowired
+    private ToolCallingService toolCallingService;
 
     @Autowired
     private SnowflakeIdGenerator idGenerator;
@@ -71,7 +77,15 @@ public class AiChatService {
         return aiMessageRepository.save(message);
     }
 
+    // 原始方法（无 tool calling）
     public void streamChat(Long assistantId, Long conversationId, String userContent, Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError) {
+        streamChat(assistantId, conversationId, userContent, onToken, onComplete, onError, null, null);
+    }
+
+    // 带 tool calling 的方法
+    public void streamChat(Long assistantId, Long conversationId, String userContent,
+                           Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
+                           Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
         try {
             Optional<AiAssistant> assistantOpt = aiAssistantService.getAssistantById(assistantId);
             if (assistantOpt.isEmpty()) {
@@ -95,16 +109,470 @@ public class AiChatService {
 
             boolean isGlm = baseUrl.contains("open.bigmodel.cn");
 
-            if (isGlm) {
-                streamGlmChat(assistant, conversationId, userContent, onToken, onComplete, onError);
+            // 构建 chat completions 端点URL
+            String chatUrl;
+            if (baseUrl.endsWith("/chat/completions")) {
+                chatUrl = baseUrl;
+            } else if (baseUrl.contains("/chat/completions?")) {
+                chatUrl = baseUrl;
             } else {
-                streamOpenAiChat(assistant, conversationId, messages, baseUrl, onToken, onComplete, onError);
+                chatUrl = baseUrl + "/chat/completions";
+            }
+
+            List<String> toolDefs = toolCallingService.getToolDefinitions();
+
+            // 注入工具可用性提示到系统消息
+            if (!toolDefs.isEmpty()) {
+                int insertIndex = Math.min(1, messages.size());
+                messages.add(insertIndex, new SystemMessage(buildToolAvailabilityPrompt(toolDefs)));
+            }
+
+            if (isGlm) {
+                toolCallingGlm(assistant, conversationId, messages, toolDefs, onToken, onComplete, onError, onToolCall, onToolResult);
+            } else {
+                toolCallingOpenAi(assistant, conversationId, messages, chatUrl, toolDefs, onToken, onComplete, onError, onToolCall, onToolResult);
             }
 
         } catch (Exception e) {
             onError.accept("AI调用失败: " + e.getMessage());
         }
     }
+
+    // ==================== OpenAI 路径 (原始 WebClient, agent 式 function calling) ====================
+
+    private void toolCallingOpenAi(AiAssistant assistant, Long conversationId, List<Message> messages,
+                                   String chatUrl, List<String> toolDefs,
+                                   Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
+                                   Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
+        try {
+            double temp = assistant.getTemperature() != null ? assistant.getTemperature() : 0.7;
+
+            WebClient webClient = WebClient.builder()
+                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + assistant.getApiKey())
+                    .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
+                    .build();
+
+            // 将 Spring AI Message 转为 JSON messages 数组
+            List<ObjectNode> agentMessages = new ArrayList<>();
+            for (Message msg : messages) {
+                ObjectNode msgNode = objectMapper.createObjectNode();
+                String text = msg.getText();
+                if (msg instanceof SystemMessage) {
+                    msgNode.put("role", "system");
+                } else if (msg instanceof UserMessage) {
+                    msgNode.put("role", "user");
+                } else if (msg instanceof AssistantMessage) {
+                    msgNode.put("role", "assistant");
+                } else {
+                    msgNode.put("role", "user");
+                }
+                msgNode.put("content", text != null ? text : "");
+                agentMessages.add(msgNode);
+            }
+
+            // 构建 tools 数组（OpenAI function calling 格式）
+            ArrayNode toolsArray = objectMapper.createArrayNode();
+            for (String toolDefJson : toolDefs) {
+                toolsArray.add(objectMapper.readTree(toolDefJson));
+            }
+            String toolsJson = objectMapper.writeValueAsString(toolsArray);
+            log.info("OpenAI agent: tools={}", toolsJson);
+
+            // Agent 循环：最多 MAX_TOOL_ROUNDS 轮
+            for (int round = 0; round <= ToolCallingService.MAX_TOOL_ROUNDS; round++) {
+                // 构建请求体（非流式，用于检测 tool_calls）
+                ObjectNode requestBody = objectMapper.createObjectNode();
+                requestBody.put("model", assistant.getModel());
+                requestBody.put("temperature", temp);
+                requestBody.put("stream", false);
+
+                ArrayNode msgsArray = requestBody.putArray("messages");
+                for (ObjectNode msg : agentMessages) {
+                    msgsArray.add(msg);
+                }
+                requestBody.set("tools", toolsArray);
+
+                String bodyJson = objectMapper.writeValueAsString(requestBody);
+                log.info("OpenAI agent round {}: 发送请求, messages={}, model={}", round, agentMessages.size(), assistant.getModel());
+                if (round > 0) {
+                    // 打印 tool 相关消息，便于调试 400 错误
+                    for (int i = 0; i < agentMessages.size(); i++) {
+                        ObjectNode m = agentMessages.get(i);
+                        String role = m.has("role") ? m.get("role").asText() : "?";
+                        boolean hasToolCalls = m.has("tool_calls") && m.get("tool_calls").isArray() && m.get("tool_calls").size() > 0;
+                        boolean hasToolCallId = m.has("tool_call_id");
+                        String contentPreview = m.has("content") && !m.get("content").isNull() ? m.get("content").asText().substring(0, Math.min(50, m.get("content").asText().length())) : "null";
+                        log.info("  msg[{}] role={} content='{}' hasToolCalls={} hasToolCallId={}", i, role, contentPreview, hasToolCalls, hasToolCallId);
+                    }
+                }
+
+                // 非流式调用
+                String responseJson;
+                try {
+                    responseJson = webClient.post()
+                            .uri(chatUrl)
+                            .bodyValue(bodyJson)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .block();
+                } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+                    String errBody = e.getResponseBodyAsString();
+                    log.error("API返回错误 {}: {}", e.getStatusCode(), errBody);
+                    onError.accept("API调用失败(" + e.getStatusCode().value() + "): " + errBody);
+                    return;
+                } catch (Exception e) {
+                    String errMsg = e.getMessage();
+                    log.error("API调用异常: {}", errMsg);
+                    onError.accept("API调用失败: " + errMsg);
+                    return;
+                }
+
+                if (responseJson == null) {
+                    onError.accept("API返回为空");
+                    return;
+                }
+
+                log.info("OpenAI agent round {}: 响应前200字符: {}", round, responseJson.substring(0, Math.min(200, responseJson.length())));
+
+                JsonNode node = objectMapper.readTree(responseJson);
+                JsonNode choices = node.get("choices");
+                if (choices == null || !choices.isArray() || choices.isEmpty()) {
+                    onError.accept("API响应格式错误: " + responseJson.substring(0, Math.min(500, responseJson.length())));
+                    return;
+                }
+
+                JsonNode choice = choices.get(0);
+                JsonNode messageNode = choice.get("message");
+                if (messageNode == null) {
+                    onError.accept("API响应中无message");
+                    return;
+                }
+
+                String assistantContent = messageNode.has("content") && !messageNode.get("content").isNull()
+                        ? messageNode.get("content").asText() : "";
+
+                // 检查是否有 tool_calls
+                JsonNode toolCallsNode = messageNode.get("tool_calls");
+                if (toolCallsNode != null && toolCallsNode.isArray() && toolCallsNode.size() > 0) {
+                    log.info("OpenAI agent round {}: 检测到 {} 个工具调用", round, toolCallsNode.size());
+
+                    // 将 assistant message（含 tool_calls）加入历史
+                    // 注意：有 tool_calls 时 content 必须为 null，不能是空字符串
+                    ObjectNode assistantMsg = objectMapper.createObjectNode();
+                    assistantMsg.put("role", "assistant");
+                    if (assistantContent != null && !assistantContent.isEmpty()) {
+                        assistantMsg.put("content", assistantContent);
+                    } else {
+                        assistantMsg.putNull("content");
+                    }
+                    assistantMsg.set("tool_calls", toolCallsNode);
+                    // DeepSeek 思考模式要求 reasoning_content 必须原样传回
+                    JsonNode reasoningNode = messageNode.get("reasoning_content");
+                    if (reasoningNode != null && !reasoningNode.isNull()) {
+                        assistantMsg.set("reasoning_content", reasoningNode);
+                    }
+                    agentMessages.add(assistantMsg);
+
+                    // 执行每个工具调用
+                    for (JsonNode tc : toolCallsNode) {
+                        String callId = tc.has("id") ? tc.get("id").asText() : "call_" + System.currentTimeMillis();
+                        JsonNode funcNode = tc.get("function");
+                        String toolName = funcNode != null && funcNode.has("name") ? funcNode.get("name").asText() : "unknown";
+                        String args = funcNode != null && funcNode.has("arguments") ? funcNode.get("arguments").asText() : "{}";
+
+                        // 通知前端：工具调用开始
+                        if (onToolCall != null) {
+                            onToolCall.accept(Map.of(
+                                    "callId", callId,
+                                    "toolName", toolName,
+                                    "args", args
+                            ));
+                        }
+
+                        log.info("OpenAI agent: 执行工具 {} with args {}", toolName, args);
+
+                        // 执行工具
+                        String result = toolCallingService.executeTool(toolName, args);
+                        if (result == null || result.isEmpty()) {
+                            result = "工具未返回任何内容";
+                        }
+
+                        // 通知前端：工具调用完成
+                        if (onToolResult != null) {
+                            onToolResult.accept(Map.of(
+                                    "callId", callId,
+                                    "toolName", toolName,
+                                    "result", result.length() > 500 ? result.substring(0, 500) + "..." : result
+                            ));
+                        }
+
+                        log.info("OpenAI agent: 工具 {} 返回 {} 字符", toolName, result.length());
+
+                        // 添加 tool result 到消息历史
+                        ObjectNode toolResultMsg = objectMapper.createObjectNode();
+                        toolResultMsg.put("role", "tool");
+                        toolResultMsg.put("tool_call_id", callId);
+                        toolResultMsg.put("content", result);
+                        agentMessages.add(toolResultMsg);
+                    }
+                    // 继续循环，让模型基于工具结果生成回复
+                } else {
+                    // 没有 tool_calls，这是最终回复
+                    assistantContent = cleanToolArtifacts(assistantContent);
+                    log.info("OpenAI agent: 最终回复 ({}字符)", assistantContent.length());
+
+                    // 分批发送，每批 20 字符，间隔 10ms，避免 WebSocket 缓冲溢出
+                    if (!assistantContent.isEmpty()) {
+                        int chunkSize = 20;
+                        for (int i = 0; i < assistantContent.length(); i += chunkSize) {
+                            int end = Math.min(i + chunkSize, assistantContent.length());
+                            onToken.accept(assistantContent.substring(i, end));
+                            try { Thread.sleep(10); } catch (InterruptedException ignored) {}
+                        }
+                    }
+
+                    aiConversationService.incrementMessageCount(conversationId);
+                    checkAndSummarize(conversationId, assistant);
+                    onComplete.accept(assistantContent);
+                    return;
+                }
+            }
+
+            onError.accept("工具调用轮次超限（" + ToolCallingService.MAX_TOOL_ROUNDS + "轮）");
+        } catch (Exception e) {
+            log.error("OpenAI agent 失败: {}", e.getMessage(), e);
+            onError.accept("AI调用失败: " + e.getMessage());
+        }
+    }
+
+    // ==================== GLM 路径 (内置 web_search 工具) ====================
+
+    private void toolCallingGlm(AiAssistant assistant, Long conversationId, List<Message> messages,
+                                List<String> toolDefs,
+                                Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
+                                Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
+        try {
+            String url = assistant.getBaseUrl();
+            if (!url.endsWith("/chat/completions")) {
+                url = url + "/chat/completions";
+            }
+
+            double temp = assistant.getTemperature() != null ? assistant.getTemperature() : 0.7;
+            temp = Math.min(temp, 1.0);
+            temp = Math.max(temp, 0.0);
+
+            // 构建消息列表
+            List<ObjectNode> glmMessages = buildGlmMessages(assistant, conversationId);
+
+            // 注入工具可用性提示
+            if (!toolDefs.isEmpty()) {
+                ObjectNode toolPromptMsg = objectMapper.createObjectNode();
+                toolPromptMsg.put("role", "system");
+                toolPromptMsg.put("content", buildToolAvailabilityPrompt(toolDefs));
+                int insertIndex = Math.min(1, glmMessages.size());
+                glmMessages.add(insertIndex, toolPromptMsg);
+            }
+
+            WebClient webClient = WebClient.builder()
+                    .baseUrl(url)
+                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + assistant.getApiKey())
+                    .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
+                    .build();
+
+            // 第一次调用：启用 GLM 内置 web_search 工具
+            ObjectNode requestBody = objectMapper.createObjectNode();
+            requestBody.put("model", assistant.getModel());
+            requestBody.put("temperature", temp);
+            requestBody.put("stream", false);
+
+            ArrayNode messagesArray = requestBody.putArray("messages");
+            for (ObjectNode msg : glmMessages) {
+                messagesArray.add(msg);
+            }
+
+            // 使用 GLM 内置 WebSearchToolSchema
+            ArrayNode toolsArray = requestBody.putArray("tools");
+            ObjectNode webSearchTool = objectMapper.createObjectNode();
+            webSearchTool.put("type", "web_search");
+            ObjectNode webSearchConfig = webSearchTool.putObject("web_search");
+            webSearchConfig.put("enable", true);
+            toolsArray.add(webSearchTool);
+
+            String bodyJson = objectMapper.writeValueAsString(requestBody);
+            log.info("GLM请求(带web_search): {}", bodyJson);
+
+            String responseJson = webClient.post()
+                    .bodyValue(bodyJson)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            if (responseJson == null) {
+                onError.accept("GLM返回为空");
+                return;
+            }
+
+            JsonNode node = objectMapper.readTree(responseJson);
+            JsonNode choices = node.get("choices");
+            if (choices == null || !choices.isArray() || choices.isEmpty()) {
+                onError.accept("GLM响应格式错误");
+                return;
+            }
+
+            JsonNode choice = choices.get(0);
+            JsonNode message = choice.get("message");
+
+            if (message == null) {
+                onError.accept("GLM响应中无message");
+                return;
+            }
+
+            String content = message.has("content") ? message.get("content").asText() : "";
+
+            // 检查是否有 web_search 结果
+            JsonNode webSearchResults = node.get("web_search");
+            if (webSearchResults != null && webSearchResults.isArray() && webSearchResults.size() > 0) {
+                // 通知前端：正在搜索
+                if (onToolCall != null) {
+                    onToolCall.accept(Map.of(
+                            "callId", "glm_search_" + System.currentTimeMillis(),
+                            "toolName", "web_search",
+                            "args", "{\"engine\":\"search_std\"}"
+                    ));
+                }
+
+                // 构建搜索结果摘要
+                StringBuilder searchSummary = new StringBuilder();
+                for (JsonNode result : webSearchResults) {
+                    String title = result.has("title") ? result.get("title").asText() : "";
+                    String resultContent = result.has("content") ? result.get("content").asText() : "";
+                    String link = result.has("link") ? result.get("link").asText() : "";
+                    if (!title.isEmpty()) {
+                        searchSummary.append("[").append(title).append("](").append(link).append(")\n");
+                    }
+                    if (!resultContent.isEmpty()) {
+                        searchSummary.append(resultContent).append("\n\n");
+                    }
+                }
+
+                // 通知前端：搜索完成
+                if (onToolResult != null) {
+                    String summary = searchSummary.toString();
+                    onToolResult.accept(Map.of(
+                            "callId", "glm_search_" + System.currentTimeMillis(),
+                            "toolName", "web_search",
+                            "result", summary.length() > 500 ? summary.substring(0, 500) + "..." : summary
+                    ));
+                }
+
+                // 将搜索结果注入上下文，重新调用 LLM 生成最终回复
+                ObjectNode searchContextMsg = objectMapper.createObjectNode();
+                searchContextMsg.put("role", "system");
+                searchContextMsg.put("content", "以下是网络搜索结果，请基于这些信息回答用户的问题：\n\n" + searchSummary);
+                glmMessages.add(searchContextMsg);
+
+                // 第二次调用：基于搜索结果生成回复（流式）
+                ObjectNode requestBody2 = objectMapper.createObjectNode();
+                requestBody2.put("model", assistant.getModel());
+                requestBody2.put("temperature", temp);
+                requestBody2.put("stream", true);
+
+                ArrayNode messagesArray2 = requestBody2.putArray("messages");
+                for (ObjectNode msg : glmMessages) {
+                    messagesArray2.add(msg);
+                }
+
+                String bodyJson2 = objectMapper.writeValueAsString(requestBody2);
+                log.info("GLM请求(搜索后生成): {}", bodyJson2);
+
+                StringBuilder fullResponse = new StringBuilder();
+
+                webClient.post()
+                        .bodyValue(bodyJson2)
+                        .retrieve()
+                        .bodyToFlux(String.class)
+                        .filter(line -> !line.isEmpty() && !line.equals("[DONE]"))
+                        .subscribe(
+                            line -> {
+                                try {
+                                    if (line.startsWith("data: ")) {
+                                        line = line.substring(6);
+                                    }
+                                    if (line.equals("[DONE]")) return;
+
+                                    JsonNode streamNode = objectMapper.readTree(line);
+                                    JsonNode streamChoices = streamNode.get("choices");
+                                    if (streamChoices != null && streamChoices.isArray() && streamChoices.size() > 0) {
+                                        JsonNode delta = streamChoices.get(0).get("delta");
+                                        if (delta != null && delta.has("content")) {
+                                            String token = delta.get("content").asText();
+                                            if (token != null && !token.isEmpty()) {
+                                                fullResponse.append(token);
+                                                onToken.accept(token);
+                                            }
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    log.debug("GLM流式解析跳过: {}", line);
+                                }
+                            },
+                            error -> {
+                                onError.accept("GLM流式调用失败: " + error.getMessage());
+                            },
+                            () -> {
+                                String completeContent = cleanToolArtifacts(fullResponse.toString());
+                                aiConversationService.incrementMessageCount(conversationId);
+                                checkAndSummarize(conversationId, assistant);
+                                onComplete.accept(completeContent);
+                            }
+                        );
+            } else {
+                // 没有搜索结果，直接返回文本
+                aiConversationService.incrementMessageCount(conversationId);
+                checkAndSummarize(conversationId, assistant);
+                onComplete.accept(cleanToolArtifacts(content));
+            }
+
+        } catch (Exception e) {
+            log.error("GLM调用失败: {}", e.getMessage(), e);
+            onError.accept("GLM调用失败: " + e.getMessage());
+        }
+    }
+
+    private List<ObjectNode> buildGlmMessages(AiAssistant assistant, Long conversationId) {
+        List<ObjectNode> messages = new ArrayList<>();
+
+        if (assistant.getSystemPrompt() != null && !assistant.getSystemPrompt().isEmpty()) {
+            ObjectNode sysMsg = objectMapper.createObjectNode();
+            sysMsg.put("role", "system");
+            sysMsg.put("content", assistant.getSystemPrompt());
+            messages.add(sysMsg);
+        }
+
+        Optional<AiConversation> conversationOpt = aiConversationService.getConversationById(conversationId);
+        if (conversationOpt.isPresent() && conversationOpt.get().getSummary() != null) {
+            ObjectNode summaryMsg = objectMapper.createObjectNode();
+            summaryMsg.put("role", "system");
+            summaryMsg.put("content", "之前的对话摘要: " + conversationOpt.get().getSummary());
+            messages.add(summaryMsg);
+        }
+
+        int maxContext = assistant.getMaxContext() != null ? assistant.getMaxContext() : 20;
+        List<AiMessage> recentMessages = aiMessageRepository.findRecentByConversationId(conversationId, PageRequest.of(0, maxContext));
+        for (int i = recentMessages.size() - 1; i >= 0; i--) {
+            AiMessage msg = recentMessages.get(i);
+            ObjectNode msgNode = objectMapper.createObjectNode();
+            msgNode.put("role", msg.getRole());
+            msgNode.put("content", msg.getContent());
+            messages.add(msgNode);
+        }
+
+        return messages;
+    }
+
+    // ==================== 原始流式方法（保留兼容） ====================
 
     private void streamGlmChat(AiAssistant assistant, Long conversationId, String userContent, Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError) {
         try {
@@ -124,23 +592,20 @@ public class AiChatService {
             requestBody.put("stream", true);
 
             com.fasterxml.jackson.databind.node.ArrayNode messagesArray = requestBody.putArray("messages");
-            
-            // 系统提示
+
             if (assistant.getSystemPrompt() != null && !assistant.getSystemPrompt().isEmpty()) {
                 ObjectNode sysMsg = messagesArray.addObject();
                 sysMsg.put("role", "system");
                 sysMsg.put("content", assistant.getSystemPrompt());
             }
-            
-            // 对话摘要
+
             Optional<AiConversation> conversationOpt = aiConversationService.getConversationById(conversationId);
             if (conversationOpt.isPresent() && conversationOpt.get().getSummary() != null) {
                 ObjectNode summaryMsg = messagesArray.addObject();
                 summaryMsg.put("role", "system");
                 summaryMsg.put("content", "之前的对话摘要: " + conversationOpt.get().getSummary());
             }
-            
-            // 历史消息
+
             int maxContext = assistant.getMaxContext() != null ? assistant.getMaxContext() : 20;
             List<AiMessage> recentMessages = aiMessageRepository.findRecentByConversationId(conversationId, PageRequest.of(0, maxContext));
             for (int i = recentMessages.size() - 1; i >= 0; i--) {
@@ -149,8 +614,7 @@ public class AiChatService {
                 msgNode.put("role", msg.getRole());
                 msgNode.put("content", msg.getContent());
             }
-            
-            // 当前用户消息
+
             ObjectNode userMsg = messagesArray.addObject();
             userMsg.put("role", "user");
             userMsg.put("content", userContent);
@@ -179,7 +643,7 @@ public class AiChatService {
                                     line = line.substring(6);
                                 }
                                 if (line.equals("[DONE]")) return;
-                                
+
                                 JsonNode node = objectMapper.readTree(line);
                                 JsonNode choices = node.get("choices");
                                 if (choices != null && choices.isArray() && choices.size() > 0) {
@@ -312,6 +776,10 @@ public class AiChatService {
                 if (baseUrl.endsWith("/v1")) {
                     baseUrl = baseUrl.substring(0, baseUrl.length() - 3);
                 }
+                // 去掉用户可能带的 /chat/completions 后缀
+                if (baseUrl.endsWith("/chat/completions")) {
+                    baseUrl = baseUrl.substring(0, baseUrl.length() - "/chat/completions".length());
+                }
                 boolean isGlm = baseUrl.contains("open.bigmodel.cn");
 
                 String summary;
@@ -320,7 +788,7 @@ public class AiChatService {
                 } else {
                     summary = summarizeOpenAi(assistant, baseUrl, history.toString());
                 }
-                
+
                 if (summary != null && !summary.isEmpty()) {
                     aiConversationService.updateSummary(conversationId, summary);
                 }
@@ -407,6 +875,44 @@ public class AiChatService {
             log.warn("OpenAI摘要生成失败: {}", e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * 清理回复中可能残留的工具调用痕迹
+     */
+    private String cleanToolArtifacts(String content) {
+        if (content == null || content.isEmpty()) return content;
+        // 移除 web_fetch {...} 调用痕迹
+        content = content.replaceAll("(?s)web_fetch\\s*\\{[^}]*\"url\"[^}]*\\}", "");
+        // 移除 function_call 相关内容
+        content = content.replaceAll("(?s)```\\s*(?:json)?\\s*\\{[^}]*(?:\"name\"|\"arguments\"|\"url\")[^}]*\\}\\s*```", "");
+        // 移除孤立的 {"url": ...} JSON 片段
+        content = content.replaceAll("\\{\\s*\"url\"\\s*:\\s*\"[^\"]*\"\\s*}", "");
+        // 清理多余空行
+        content = content.replaceAll("(?m)^\\s*$\\n{2,}", "\n\n").trim();
+        return content;
+    }
+
+    private String buildToolAvailabilityPrompt(List<String> toolDefs) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 工具能力\n");
+        sb.append("你拥有以下工具，可以默默使用，无需告知用户：\n");
+        for (String toolDefJson : toolDefs) {
+            try {
+                JsonNode def = objectMapper.readTree(toolDefJson);
+                JsonNode func = def.get("function");
+                String name = func.get("name").asText();
+                String desc = func.get("description").asText();
+                sb.append("- ").append(name).append(": ").append(desc).append("\n");
+            } catch (Exception ignored) {}
+        }
+        sb.append("\n## 行为规则\n");
+        sb.append("1. 当用户的消息中包含URL链接、或需要查询实时网络信息时，直接调用工具获取内容，不要说你无法访问网络。\n");
+        sb.append("2. 调用工具后，基于获取到的内容自然地回答用户，就像你本来就知道这些信息一样。\n");
+        sb.append("3. 绝对不要在回复中展示工具调用的过程、参数、JSON、函数名等技术细节。用户不需要知道你调用了什么工具。\n");
+        sb.append("4. 不要输出类似 web_fetch、{\"url\":...}、function_call 之类的内容。\n");
+        sb.append("5. 用自然、亲切、简洁的语气交流，像一个聪明的朋友在帮忙，不要用机械的口吻。\n");
+        return sb.toString();
     }
 
     public List<AiMessage> getConversationMessages(Long conversationId) {

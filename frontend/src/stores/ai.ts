@@ -41,6 +41,14 @@ export interface AiMessage {
   createdAt: number
 }
 
+export interface ToolCallState {
+  callId: string
+  toolName: string
+  args: string
+  result?: string
+  status: 'running' | 'done'
+}
+
 export const useAiStore = defineStore('ai', () => {
   const systemAssistant = ref<AiAssistant | null>(null)
   const userAssistants = ref<AiAssistant[]>([])
@@ -53,6 +61,7 @@ export const useAiStore = defineStore('ai', () => {
   const error = ref<string | null>(null)
   const isTyping = ref(false)
   const isStreamDone = ref(false)
+  const activeToolCalls = ref<ToolCallState[]>([])
 
   const allAssistants = computed(() => {
     const list: AiAssistant[] = []
@@ -158,6 +167,7 @@ export const useAiStore = defineStore('ai', () => {
     messages.value.push(message)
     streamContent.value = ''
     isStreamDone.value = false
+    activeToolCalls.value = []
   }
 
   function setError(message: string | null) {
@@ -181,6 +191,23 @@ export const useAiStore = defineStore('ai', () => {
     error.value = null
     isTyping.value = false
     isStreamDone.value = false
+    activeToolCalls.value = []
+  }
+
+  function addToolCall(callId: string, toolName: string, args: string) {
+    activeToolCalls.value.push({ callId, toolName, args, status: 'running' })
+  }
+
+  function updateToolResult(callId: string, result: string) {
+    const tc = activeToolCalls.value.find(t => t.callId === callId)
+    if (tc) {
+      tc.result = result
+      tc.status = 'done'
+    }
+  }
+
+  function clearToolCalls() {
+    activeToolCalls.value = []
   }
 
   function reset() {
@@ -209,6 +236,7 @@ export const useAiStore = defineStore('ai', () => {
     error,
     isTyping,
     isStreamDone,
+    activeToolCalls,
     allAssistants,
     setSystemAssistant,
     setUserAssistants,
@@ -230,6 +258,9 @@ export const useAiStore = defineStore('ai', () => {
     clearError,
     setTyping,
     clearChatState,
-    reset
+    reset,
+    addToolCall,
+    updateToolResult,
+    clearToolCalls
   }
 })

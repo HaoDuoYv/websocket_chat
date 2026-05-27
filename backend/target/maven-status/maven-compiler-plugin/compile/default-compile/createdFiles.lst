@@ -22,6 +22,7 @@ com\chat\config\CacheConfig.class
 com\chat\controller\AdminController.class
 com\chat\exception\UserBannedException.class
 com\chat\service\GomokuGameService$GameRoom.class
+com\chat\service\WebFetchTool.class
 com\chat\service\EditorDocumentService.class
 com\chat\entity\AiAssistant.class
 com\chat\repository\RoomRepository.class
@@ -51,6 +52,7 @@ com\chat\service\AiChatService.class
 com\chat\interceptor\WebSocketAuthInterceptor.class
 com\chat\service\MessageService.class
 com\chat\service\UserService.class
+com\chat\service\ToolCallingService.class
 com\chat\entity\FileRecord.class
 com\chat\repository\MessageRepository.class
 com\chat\controller\AppController$1.class

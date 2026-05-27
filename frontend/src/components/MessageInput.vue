@@ -21,6 +21,7 @@ const props = defineProps<{
   isDark: boolean
   disabled: boolean
   onlineUsers: User[]
+  currentUserId?: string
 }>()
 
 const emit = defineEmits<{
@@ -208,6 +209,7 @@ defineExpose({ clearPendingAttachments, uploadFiles, removeSentAttachments: (ids
           :users="onlineUsers"
           :is-dark="isDark"
           :disabled="disabled"
+          :current-user-id="currentUserId"
           @send="handleMentionSend"
         />
       </div>

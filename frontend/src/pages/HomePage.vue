@@ -18,6 +18,8 @@ import { useToast } from '@/composables/useToast'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import { getUserRemarks, saveUserRemark } from '@/api/userRemark'
 import { emojiCategories } from '@/config/emojis'
+import MentionInput from '@/components/MentionInput.vue'
+import MentionNotification from '@/components/MentionNotification.vue'
 
 const toast = useToast()
 
@@ -84,6 +86,11 @@ const {
   readReceipts,
   sendRoomAvatarUpdated,
   refreshRoomList,
+  sendMentionMessage,
+  unreadMentionCount,
+  latestMention,
+  markMentionsAsRead,
+  loadUnreadMentions,
 } = useWebSocket()
 
 const systemAssistant = computed(() => aiStore.systemAssistant)
@@ -121,7 +128,7 @@ const roomMembers = ref<any[]>([])
 const showInviteDialog = ref(false)
 const inviteSearchQuery = ref('')
 const inviteSearchInput = ref<HTMLInputElement | null>(null)
-const messageTextarea = ref<HTMLTextAreaElement | null>(null)
+const mentionInputRef = ref<InstanceType<typeof MentionInput> | null>(null)
 const isRemarkDialogOpen = ref(false)
 const remarkTarget = ref<{ userId: string; username: string } | null>(null)
 const userRemarks = ref<Record<string, string>>({})
@@ -612,6 +619,7 @@ watch(selectedRoomId, (newId, oldId) => {
   if (newId) {
     setCurrentRoom(newId)
     loadMessageHistory(newId)
+    loadUnreadMentions(newId)
     scrollToBottom()
     if (currentRoom.value?.type === 'public') {
       loadRoomMembers(newId)
@@ -1221,32 +1229,42 @@ const sendPendingAttachments = async () => {
   }
 }
 
-const autoResizeTextarea = () => {
-  const el = messageTextarea.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
-}
-
 const handleSendMessage = async () => {
-  if (!canSend.value || !user.value || !selectedRoomId.value) return
-
-  const content = newMessage.value.trim()
-  if (content) {
-    sendMessage(selectedRoomId.value, content, user.value.userId)
-    newMessage.value = ''
-    nextTick(() => {
-      if (messageTextarea.value) {
-        messageTextarea.value.style.height = 'auto'
-      }
-    })
-  }
-
+  // 通过 MentionInput 的 triggerSend 处理发送（包含 mention 逻辑）
+  mentionInputRef.value?.triggerSend()
   showEmojiPicker.value = false
-
   if (pendingAttachments.value.length > 0) {
     await sendPendingAttachments()
   }
+}
+
+interface MentionUser { userId: string; username: string }
+
+const handleMentionSend = async (content: string, mentions: MentionUser[], mentionAll: boolean) => {
+  if (!user.value || !selectedRoomId.value) return
+  if (mentions.length > 0 || mentionAll) {
+    sendMentionMessage(selectedRoomId.value, content, mentions, mentionAll)
+  } else {
+    sendMessage(selectedRoomId.value, content, user.value.userId)
+  }
+  showEmojiPicker.value = false
+  if (pendingAttachments.value.length > 0) {
+    await sendPendingAttachments()
+  }
+}
+
+const scrollToLatestMention = () => {
+  if (!selectedRoomId.value) return
+  const mention = latestMention.value[selectedRoomId.value!]
+  if (mention?.messageId && messagesContainer.value) {
+    const el = messagesContainer.value.querySelector(`[data-message-id="${mention.messageId}"]`) as HTMLElement
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('mention-highlight-flash')
+      setTimeout(() => el.classList.remove('mention-highlight-flash'), 2000)
+    }
+  }
+  markMentionsAsRead(selectedRoomId.value)
 }
 
 const activeEmojiCategory = ref('frequent')
@@ -1263,14 +1281,6 @@ const uploadFiles = async (files: File[] | FileList) => {
 const hasDraggedFiles = (event: DragEvent) => {
   const types = event.dataTransfer?.types
   return types ? Array.from(types).includes('Files') : false
-}
-
-const handlePasteUpload = async (event: ClipboardEvent) => {
-  const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'))
-  if (files.length === 0) return
-
-  event.preventDefault()
-  await uploadFiles(files)
 }
 
 const handleDragEnter = (event: DragEvent) => {
@@ -1893,6 +1903,15 @@ const isRoomReadByOthers = (roomId: string): boolean => {
           </div>
         </header>
 
+        <MentionNotification
+          v-if="selectedRoomId && unreadMentionCount[selectedRoomId] > 0"
+          :count="unreadMentionCount[selectedRoomId]"
+          :latest-mention="latestMention[selectedRoomId]"
+          :is-dark="isDarkTheme"
+          @click="scrollToLatestMention"
+          @mark-read="markMentionsAsRead(selectedRoomId!)"
+        />
+
         <!-- 消息区域 - 大量留白 -->
         <div ref="messagesContainer" class="flex-1 overflow-y-auto px-6 py-6">
           <!-- 空状态 -->
@@ -1922,6 +1941,7 @@ const isRoomReadByOthers = (roomId: string): boolean => {
 
               <!-- 消息气泡 - 极简 -->
               <div
+                :data-message-id="message.id"
                 :class="[
                   'flex gap-3 mb-4 animate-message-in',
                   String(message.senderId) === user?.userId ? 'flex-row-reverse' : 'flex-row'
@@ -2101,17 +2121,15 @@ const isRoomReadByOthers = (roomId: string): boolean => {
             />
 
             <div class="flex-1 relative">
-              <textarea
-                ref="messageTextarea"
+              <MentionInput
+                ref="mentionInputRef"
                 v-model="newMessage"
-                @paste="handlePasteUpload"
-                @keydown.enter.exact.prevent="handleSendMessage"
-                @input="autoResizeTextarea"
-                rows="1"
-                placeholder="输入消息"
-                class="w-full px-0 py-2 bg-transparent border-0 border-b text-sm focus:outline-none focus:border-[#18181B] transition-colors resize-none overflow-hidden leading-5"
-                :class="isDarkTheme ? 'border-gray-700 text-gray-200 placeholder-gray-500' : 'border-gray-200 text-gray-700 placeholder-gray-400'"
-              ></textarea>
+                :users="roomMembers"
+                :is-dark="isDarkTheme"
+                :disabled="isSendingFiles"
+                :current-user-id="user?.userId"
+                @send="handleMentionSend"
+              />
             </div>
 
             <button
@@ -2744,3 +2762,14 @@ const isRoomReadByOthers = (roomId: string): boolean => {
     </Transition>
   </Teleport>
 </template>
+
+<style>
+.mention-highlight-flash {
+  animation: mention-flash 2s ease-out;
+}
+
+@keyframes mention-flash {
+  0% { background-color: rgba(59, 130, 246, 0.2); border-radius: 8px; }
+  100% { background-color: transparent; }
+}
+</style>

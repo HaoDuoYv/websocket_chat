@@ -888,7 +888,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             WebSocketSession session = sessions.get(sessionId);
             if (session != null && session.isOpen()) {
                 String message = objectMapper.writeValueAsString(event);
-                session.sendMessage(new TextMessage(message));
+                synchronized (session) {
+                    if (session.isOpen()) {
+                        session.sendMessage(new TextMessage(message));
+                    }
+                }
             }
         } catch (java.nio.channels.ClosedChannelException e) {
             logger.warn("发送消息失败，通道已关闭: {}", sessionId);
@@ -995,7 +999,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             }
 
             final Long convId = conversationId;
-            
+
             aiChatService.streamChat(assistantId, conversationId, content,
                 token -> {
                     try {
@@ -1015,7 +1019,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                             "token", "",
                             "done", true
                         )));
-                        
+
                         // 发送完成事件，包含完整消息
                         AiMessage savedMessage = aiChatService.saveAssistantMessage(convId, completeContent, null);
                         sendToSession(session.getId(), new Event("ai:chat:complete", Map.of(
@@ -1034,6 +1038,30 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                         sendToSession(session.getId(), new Event("ai:chat:error", Map.of("message", error)));
                     } catch (Exception e) {
                         logger.error("发送AI错误事件失败: {}", e.getMessage());
+                    }
+                },
+                toolCall -> {
+                    try {
+                        sendToSession(session.getId(), new Event("ai:chat:tool_call", Map.of(
+                            "conversationId", String.valueOf(convId),
+                            "callId", toolCall.getOrDefault("callId", ""),
+                            "toolName", toolCall.getOrDefault("toolName", ""),
+                            "args", toolCall.getOrDefault("args", "{}")
+                        )));
+                    } catch (Exception e) {
+                        logger.error("发送工具调用事件失败: {}", e.getMessage());
+                    }
+                },
+                toolResult -> {
+                    try {
+                        sendToSession(session.getId(), new Event("ai:chat:tool_result", Map.of(
+                            "conversationId", String.valueOf(convId),
+                            "callId", toolResult.getOrDefault("callId", ""),
+                            "toolName", toolResult.getOrDefault("toolName", ""),
+                            "result", toolResult.getOrDefault("result", "")
+                        )));
+                    } catch (Exception e) {
+                        logger.error("发送工具结果事件失败: {}", e.getMessage());
                     }
                 }
             );

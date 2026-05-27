@@ -403,6 +403,20 @@ export function useWebSocket() {
         break
       }
 
+      case 'ai:chat:tool_call': {
+        const aiStore = useAiStore()
+        const { callId, toolName, args } = event.data
+        aiStore.addToolCall(callId, toolName, args)
+        break
+      }
+
+      case 'ai:chat:tool_result': {
+        const aiStore = useAiStore()
+        const { callId, result } = event.data
+        aiStore.updateToolResult(callId, result)
+        break
+      }
+
       case 'ai:conversation:created': {
         const aiStore = useAiStore()
         const conversation = event.data.conversation as AiConversation

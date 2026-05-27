@@ -37,6 +37,14 @@ interface ContentSegment {
   language?: string
 }
 
+interface ToolCallState {
+  callId: string
+  toolName: string
+  args: string
+  result?: string
+  status: 'running' | 'done'
+}
+
 const props = defineProps<{
   messages: Message[]
   currentUserId: string
@@ -46,6 +54,7 @@ const props = defineProps<{
   currentUserAvatar?: string
   isStreaming?: boolean
   streamContent?: string
+  toolCalls?: ToolCallState[]
 }>()
 
 const emit = defineEmits<{
@@ -166,6 +175,16 @@ const copyMessage = (content: string) => {
   navigator.clipboard.writeText(content)
 }
 
+const parseToolArgs = (args: string): string => {
+  try {
+    const parsed = JSON.parse(args)
+    if (parsed.url) return parsed.url
+    return JSON.stringify(parsed)
+  } catch {
+    return args
+  }
+}
+
 interface Mention {
   userId: string
   username: string
@@ -210,10 +229,21 @@ const scrollToBottom = () => {
   })
 }
 
+const scrollToMessage = (messageId: string) => {
+  nextTick(() => {
+    if (!container.value) return
+    const el = container.value.querySelector(`[data-message-id="${messageId}"]`) as HTMLElement
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('mention-highlight-flash')
+    setTimeout(() => el.classList.remove('mention-highlight-flash'), 2000)
+  })
+}
+
 watch(() => props.messages.length, () => scrollToBottom())
 watch(() => props.streamContent, () => scrollToBottom())
 
-defineExpose({ scrollToBottom })
+defineExpose({ scrollToBottom, scrollToMessage })
 </script>
 
 <template>
@@ -242,6 +272,7 @@ defineExpose({ scrollToBottom })
         <div
           v-if="isAiMessage(message)"
           class="flex gap-3 mb-4 group"
+          :data-message-id="message.id"
         >
           <img
             v-if="currentAssistant?.avatarUrl"
@@ -299,6 +330,7 @@ defineExpose({ scrollToBottom })
         <!-- 普通消息样式 -->
         <div
           v-else
+          :data-message-id="message.id"
           :class="[
             'flex gap-3 mb-4 bubble-pop',
             isAiMode || String(message.senderId || '') === currentUserId ? 'flex-row-reverse' : 'flex-row'
@@ -450,5 +482,14 @@ defineExpose({ scrollToBottom })
   color: #ff4d4f;
   background-color: rgba(255, 77, 79, 0.1);
   font-weight: bold;
+}
+
+.mention-highlight-flash {
+  animation: mention-flash 2s ease-out;
+}
+
+@keyframes mention-flash {
+  0% { background-color: rgba(59, 130, 246, 0.2); border-radius: 8px; }
+  100% { background-color: transparent; }
 }
 </style>

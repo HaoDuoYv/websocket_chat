@@ -77,7 +77,7 @@ const initChat = () => {
   const userData = localStorage.getItem('user')
   if (!userData) { router.push('/login'); return }
   user.value = JSON.parse(userData)
-  connect(user.value)
+  connect(user.value, user.value.token)
   messagesContainer.value?.scrollToBottom()
 }
 
@@ -116,6 +116,10 @@ const handleMarkMentionsAsRead = () => {
 }
 
 const scrollToLatestMention = () => {
+  const mention = latestMention.value[roomId.value]
+  if (mention?.messageId) {
+    messagesContainer.value?.scrollToMessage(String(mention.messageId))
+  }
   handleMarkMentionsAsRead()
 }
 
@@ -283,6 +287,7 @@ const openFilePreview = (file: { fileName: string; fileSize: number; fileUrl: st
         :is-dark="isDarkTheme"
         :disabled="isSendingFiles"
         :online-users="roomMembers"
+        :current-user-id="user?.userId"
         @send="handleSendText"
         @send-files="handleSendFiles"
         @error="showUploadError"

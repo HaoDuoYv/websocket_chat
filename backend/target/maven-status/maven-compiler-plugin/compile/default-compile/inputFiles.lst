@@ -12,6 +12,7 @@ E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\controller\Aut
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\repository\RoomMemberRepository.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\config\AdminConfig.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\entity\Message.java
+E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\service\ToolCallingService.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\utils\LocalUploadUtil.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\service\MentionService.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\entity\Room.java
@@ -44,6 +45,7 @@ E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\config\FileUpl
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\repository\AiMessageRepository.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\controller\UserRemarkController.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\service\LogMonitorService.java
+E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\service\WebFetchTool.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\entity\RoomMember.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\config\DatabaseMigration.java
 E:\study\gitproject\websocket_chat\backend\src\main\java\com\chat\service\MessageService.java

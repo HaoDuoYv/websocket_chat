@@ -105,9 +105,9 @@
               <h1 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">
                 {{ currentAssistant?.name || 'AI助手' }}
               </h1>
-              <p class="text-xs text-[#737373] flex items-center gap-1">
-                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                {{ currentAssistant?.model || '在线' }}
+              <p class="text-xs flex items-center gap-1" :class="isStreaming ? 'text-amber-500' : 'text-[#737373]'">
+                <span class="w-1.5 h-1.5 rounded-full" :class="isStreaming ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'"></span>
+                {{ isStreaming ? '正在输入中...' : (currentAssistant?.model || '在线') }}
               </p>
             </div>
           </div>
@@ -150,6 +150,7 @@
         :current-user-avatar="currentUserAvatar"
         :is-streaming="isStreaming"
         :stream-content="streamContent"
+        :tool-calls="activeToolCalls"
       />
 
       <!-- 错误提示 -->
@@ -283,6 +284,7 @@ const conversations = computed(() => aiStore.conversations)
 const messages = computed(() => aiStore.messages)
 const isStreaming = computed(() => aiStore.isStreaming)
 const streamContent = computed(() => aiStore.streamContent)
+const activeToolCalls = computed(() => aiStore.activeToolCalls)
 const error = computed(() => aiStore.error)
 const currentUserAvatar = computed(() => {
   try {
@@ -418,6 +420,7 @@ function handleSend() {
   if (!content || isStreaming.value) return
 
   aiStore.clearError()
+  aiStore.clearToolCalls()
   
   const userMessage = {
     id: Date.now().toString(),
