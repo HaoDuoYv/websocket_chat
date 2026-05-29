@@ -981,6 +981,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Long assistantId = parseLongId(data.get("assistantId"));
         Long conversationId = parseLongId(data.get("conversationId"));
         String content = (String) data.get("content");
+        boolean webSearch = Boolean.TRUE.equals(data.get("webSearch"));
 
         if (content == null || content.trim().isEmpty()) {
             sendToSession(session.getId(), new Event("ai:chat:error", Map.of("message", "消息不能为空")));
@@ -1000,7 +1001,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
             final Long convId = conversationId;
 
-            aiChatService.streamChat(assistantId, conversationId, content,
+            // 通知前端：AI正在思考
+            sendToSession(session.getId(), new Event("ai:chat:thinking", Map.of(
+                "conversationId", String.valueOf(convId)
+            )));
+
+            aiChatService.streamChat(assistantId, conversationId, content, webSearch,
                 token -> {
                     try {
                         sendToSession(session.getId(), new Event("ai:chat:stream", Map.of(

@@ -57,6 +57,7 @@ export const useAiStore = defineStore('ai', () => {
   const conversations = ref<AiConversation[]>([])
   const messages = ref<AiMessage[]>([])
   const isStreaming = ref(false)
+  const isThinking = ref(false)
   const streamContent = ref('')
   const error = ref<string | null>(null)
   const isTyping = ref(false)
@@ -147,8 +148,13 @@ export const useAiStore = defineStore('ai', () => {
 
   function startStream() {
     isStreaming.value = true
+    isThinking.value = false
     streamContent.value = ''
     isStreamDone.value = false
+  }
+
+  function setThinking(thinking: boolean) {
+    isThinking.value = thinking
   }
 
   function appendStreamToken(token: string) {
@@ -157,6 +163,7 @@ export const useAiStore = defineStore('ai', () => {
 
   function endStream() {
     isStreaming.value = false
+    isThinking.value = false
     isTyping.value = false
     isStreamDone.value = true
     // 不立即清空streamContent，等complete事件后由addMessageFromStream处理
@@ -187,6 +194,7 @@ export const useAiStore = defineStore('ai', () => {
     conversations.value = []
     messages.value = []
     isStreaming.value = false
+    isThinking.value = false
     streamContent.value = ''
     error.value = null
     isTyping.value = false
@@ -218,6 +226,7 @@ export const useAiStore = defineStore('ai', () => {
     conversations.value = []
     messages.value = []
     isStreaming.value = false
+    isThinking.value = false
     streamContent.value = ''
     error.value = null
     isTyping.value = false
@@ -232,6 +241,7 @@ export const useAiStore = defineStore('ai', () => {
     conversations,
     messages,
     isStreaming,
+    isThinking,
     streamContent,
     error,
     isTyping,
@@ -257,6 +267,7 @@ export const useAiStore = defineStore('ai', () => {
     setError,
     clearError,
     setTyping,
+    setThinking,
     clearChatState,
     reset,
     addToolCall,

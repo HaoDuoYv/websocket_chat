@@ -105,9 +105,9 @@
               <h1 class="font-medium text-sm" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">
                 {{ currentAssistant?.name || 'AI助手' }}
               </h1>
-              <p class="text-xs flex items-center gap-1" :class="isStreaming ? 'text-amber-500' : 'text-[#737373]'">
-                <span class="w-1.5 h-1.5 rounded-full" :class="isStreaming ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'"></span>
-                {{ isStreaming ? '正在输入中...' : (currentAssistant?.model || '在线') }}
+              <p class="text-xs flex items-center gap-1" :class="isThinking ? 'text-blue-500' : isStreaming ? 'text-amber-500' : 'text-[#737373]'">
+                <span class="w-1.5 h-1.5 rounded-full" :class="isThinking ? 'bg-blue-500 animate-pulse' : isStreaming ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'"></span>
+                {{ isThinking ? '思考中...' : isStreaming ? '正在输入中...' : (currentAssistant?.model || '在线') }}
               </p>
             </div>
           </div>
@@ -148,6 +148,7 @@
         :is-ai-mode="true"
         :current-assistant="currentAssistant"
         :current-user-avatar="currentUserAvatar"
+        :is-thinking="isThinking"
         :is-streaming="isStreaming"
         :stream-content="streamContent"
         :tool-calls="activeToolCalls"
@@ -170,15 +171,30 @@
               placeholder="输入消息..."
               rows="1"
               class="w-full px-4 py-2.5 resize-none rounded-xl text-sm focus:outline-none transition-all duration-200"
-              :class="isDarkTheme 
-                ? 'bg-[#1e1e22] text-gray-200 placeholder-gray-600 border border-gray-800' 
+              :class="isDarkTheme
+                ? 'bg-[#1e1e22] text-gray-200 placeholder-gray-600 border border-gray-800'
                 : 'bg-gray-50 text-gray-700 placeholder-gray-400 border border-gray-200'"
               style="max-height: 120px; min-height: 40px;"
             />
+            <div class="flex items-center gap-3 mt-2">
+              <button
+                @click="webSearchEnabled = !webSearchEnabled"
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer"
+                :class="webSearchEnabled
+                  ? (isDarkTheme ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-blue-50 text-blue-600 border border-blue-200')
+                  : (isDarkTheme ? 'text-gray-500 hover:text-gray-400 border border-transparent' : 'text-gray-400 hover:text-gray-600 border border-transparent')"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                联网搜索
+                <span v-if="webSearchEnabled" class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+              </button>
+            </div>
           </div>
           <button
             @click="handleSend"
-            :disabled="!inputMessage.trim() || isStreaming"
+            :disabled="!inputMessage.trim() || isStreaming || isThinking"
             class="w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
             :class="isDarkTheme 
               ? 'bg-white/10 text-white hover:bg-white/15' 
@@ -283,6 +299,7 @@ const currentConversation = computed(() => aiStore.currentConversation)
 const conversations = computed(() => aiStore.conversations)
 const messages = computed(() => aiStore.messages)
 const isStreaming = computed(() => aiStore.isStreaming)
+const isThinking = computed(() => aiStore.isThinking)
 const streamContent = computed(() => aiStore.streamContent)
 const activeToolCalls = computed(() => aiStore.activeToolCalls)
 const error = computed(() => aiStore.error)
@@ -299,6 +316,7 @@ const currentUserAvatar = computed(() => {
 
 const inputMessage = ref('')
 const contextSize = ref(10)
+const webSearchEnabled = ref(false)
 const messagesContainer = ref<InstanceType<typeof MessageList> | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const isAvatarDialogOpen = ref(false)
@@ -417,10 +435,11 @@ async function handleAvatarUpload(file: File) {
 
 function handleSend() {
   const content = inputMessage.value.trim()
-  if (!content || isStreaming.value) return
+  if (!content || isStreaming.value || isThinking.value) return
 
   aiStore.clearError()
   aiStore.clearToolCalls()
+  aiStore.setThinking(true)
   
   const userMessage = {
     id: Date.now().toString(),
@@ -433,7 +452,7 @@ function handleSend() {
   }
   aiStore.addMessage(userMessage)
 
-  sendAiChat(assistantId.value, content, currentConversation.value?.id)
+  sendAiChat(assistantId.value, content, currentConversation.value?.id, webSearchEnabled.value)
   inputMessage.value = ''
   
   nextTick(() => {

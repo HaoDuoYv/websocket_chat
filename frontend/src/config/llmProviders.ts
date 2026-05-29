@@ -1,7 +1,6 @@
 export interface LlmProviderPreset {
   label: string
   baseUrl: string
-  model: string
   description?: string
 }
 
@@ -9,43 +8,36 @@ export const LLM_PROVIDER_PRESETS: Record<string, LlmProviderPreset> = {
   openai: {
     label: 'OpenAI',
     baseUrl: 'https://api.openai.com',
-    model: 'gpt-4o-mini',
-    description: 'GPT-4o Mini'
+    description: 'OpenAI API'
   },
   deepseek: {
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
-    description: 'DeepSeek Chat'
+    description: 'DeepSeek API'
   },
   glm: {
     label: '智谱 GLM',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-4-flash',
-    description: 'GLM-4 Flash'
+    description: '智谱AI API'
   },
   qwen: {
     label: '通义千问',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode',
-    model: 'qwen-turbo',
-    description: 'Qwen Turbo'
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    description: '阿里云百炼 API'
   },
   kimi: {
     label: 'Kimi (月之暗面)',
     baseUrl: 'https://api.moonshot.cn',
-    model: 'moonshot-v1-8k',
-    description: 'Moonshot V1 8K'
+    description: '月之暗面 API'
   },
   mimo: {
     label: 'Mimo',
     baseUrl: 'https://api.mimo.com',
-    model: 'mimo-default',
-    description: 'Mimo Default'
+    description: 'Mimo API'
   },
   custom: {
     label: '自定义',
     baseUrl: '',
-    model: '',
     description: '自定义API端点'
   }
 }

@@ -253,7 +253,7 @@ const form = reactive({
   systemPrompt: '你是一个友好的AI助手，请用简洁专业的语言回复用户的问题。',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
-  model: 'gpt-4o',
+  model: '',
   temperature: 0.7,
   maxContext: 20,
   maxTokens: 4096,
@@ -264,7 +264,6 @@ watch(selectedProvider, (provider) => {
   const preset = getPresetByProvider(provider)
   if (preset && provider !== 'custom') {
     form.baseUrl = preset.baseUrl
-    form.model = preset.model
   }
 })
 

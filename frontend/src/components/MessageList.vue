@@ -52,6 +52,7 @@ const props = defineProps<{
   isAiMode?: boolean
   currentAssistant?: AiAssistant | null
   currentUserAvatar?: string
+  isThinking?: boolean
   isStreaming?: boolean
   streamContent?: string
   toolCalls?: ToolCallState[]
@@ -175,16 +176,6 @@ const copyMessage = (content: string) => {
   navigator.clipboard.writeText(content)
 }
 
-const parseToolArgs = (args: string): string => {
-  try {
-    const parsed = JSON.parse(args)
-    if (parsed.url) return parsed.url
-    return JSON.stringify(parsed)
-  } catch {
-    return args
-  }
-}
-
 interface Mention {
   userId: string
   username: string
@@ -248,7 +239,7 @@ defineExpose({ scrollToBottom, scrollToMessage })
 
 <template>
   <div ref="container" class="flex-1 overflow-y-auto px-6 py-6">
-    <div v-if="messages.length === 0 && !isStreaming" class="flex flex-col items-center justify-center h-full" :class="isDark ? 'text-gray-500' : 'text-gray-300'">
+    <div v-if="messages.length === 0 && !isStreaming && !isThinking" class="flex flex-col items-center justify-center h-full" :class="isDark ? 'text-gray-500' : 'text-gray-300'">
       <div class="w-14 h-14 bg-[#18181B] flex items-center justify-center mb-4">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -393,6 +384,40 @@ defineExpose({ scrollToBottom, scrollToMessage })
           </div>
         </div>
       </template>
+
+      <!-- AI思考中 -->
+      <div v-if="isAiMode && isThinking && !isStreaming" class="flex gap-3 mb-4">
+        <img
+          v-if="currentAssistant?.avatarUrl"
+          :src="currentAssistant.avatarUrl"
+          class="w-8 h-8 flex-shrink-0 rounded-full object-cover shadow-sm"
+        />
+        <div
+          v-else
+          class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white text-xs font-medium rounded-full shadow-sm"
+          :style="{ background: currentAssistant?.avatarColor || 'linear-gradient(135deg, #2563EB, #3B82F6)' }"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+            <circle cx="12" cy="8" r="2"/>
+          </svg>
+        </div>
+        <div class="flex flex-col max-w-[85%] min-w-0">
+          <div class="text-xs mb-1 ml-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+            {{ currentAssistant?.name || 'AI助手' }}
+          </div>
+          <div class="px-4 py-3 rounded-2xl rounded-bl-md" :class="isDark ? 'bg-[#262626]' : 'bg-[#F4F4F5]'">
+            <div class="flex items-center gap-1.5">
+              <div class="flex gap-1">
+                <span class="w-2 h-2 rounded-full animate-bounce" :class="isDark ? 'bg-blue-400' : 'bg-blue-500'" style="animation-delay: 0ms"></span>
+                <span class="w-2 h-2 rounded-full animate-bounce" :class="isDark ? 'bg-blue-400' : 'bg-blue-500'" style="animation-delay: 150ms"></span>
+                <span class="w-2 h-2 rounded-full animate-bounce" :class="isDark ? 'bg-blue-400' : 'bg-blue-500'" style="animation-delay: 300ms"></span>
+              </div>
+              <span class="text-xs ml-1" :class="isDark ? 'text-blue-400' : 'text-blue-500'">思考中</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- AI流式输出 -->
       <div v-if="isAiMode && isStreaming && streamContent" class="flex gap-3 mb-4">

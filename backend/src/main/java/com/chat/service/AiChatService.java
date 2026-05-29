@@ -79,11 +79,11 @@ public class AiChatService {
 
     // 原始方法（无 tool calling）
     public void streamChat(Long assistantId, Long conversationId, String userContent, Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError) {
-        streamChat(assistantId, conversationId, userContent, onToken, onComplete, onError, null, null);
+        streamChat(assistantId, conversationId, userContent, false, onToken, onComplete, onError, null, null);
     }
 
     // 带 tool calling 的方法
-    public void streamChat(Long assistantId, Long conversationId, String userContent,
+    public void streamChat(Long assistantId, Long conversationId, String userContent, boolean webSearch,
                            Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
                            Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
         try {
@@ -103,11 +103,6 @@ public class AiChatService {
             if (baseUrl.endsWith("/")) {
                 baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
             }
-            if (baseUrl.endsWith("/v1")) {
-                baseUrl = baseUrl.substring(0, baseUrl.length() - 3);
-            }
-
-            boolean isGlm = baseUrl.contains("open.bigmodel.cn");
 
             // 构建 chat completions 端点URL
             String chatUrl;
@@ -119,16 +114,18 @@ public class AiChatService {
                 chatUrl = baseUrl + "/chat/completions";
             }
 
+            boolean isGlm = baseUrl.contains("open.bigmodel.cn");
+
             List<String> toolDefs = toolCallingService.getToolDefinitions();
 
             // 注入工具可用性提示到系统消息
             if (!toolDefs.isEmpty()) {
                 int insertIndex = Math.min(1, messages.size());
-                messages.add(insertIndex, new SystemMessage(buildToolAvailabilityPrompt(toolDefs)));
+                messages.add(insertIndex, new SystemMessage(buildToolAvailabilityPrompt(toolDefs, webSearch)));
             }
 
             if (isGlm) {
-                toolCallingGlm(assistant, conversationId, messages, toolDefs, onToken, onComplete, onError, onToolCall, onToolResult);
+                toolCallingGlm(assistant, conversationId, messages, toolDefs, webSearch, onToken, onComplete, onError, onToolCall, onToolResult);
             } else {
                 toolCallingOpenAi(assistant, conversationId, messages, chatUrl, toolDefs, onToken, onComplete, onError, onToolCall, onToolResult);
             }
@@ -218,12 +215,16 @@ public class AiChatService {
                             .block();
                 } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
                     String errBody = e.getResponseBodyAsString();
-                    log.error("API返回错误 {}: {}", e.getStatusCode(), errBody);
-                    onError.accept("API调用失败(" + e.getStatusCode().value() + "): " + errBody);
+                    String statusText = e.getStatusText() != null ? e.getStatusText() : "";
+                    String headers = e.getHeaders() != null ? e.getHeaders().toString() : "";
+                    log.error("API返回错误 {} {}: body=[{}] headers=[{}] requestUrl={}", e.getStatusCode(), statusText, errBody, headers, chatUrl);
+                    String detail = !errBody.isEmpty() ? errBody
+                            : "status=" + e.getStatusCode().value() + " " + statusText + ", url=" + chatUrl;
+                    onError.accept("API调用失败(" + e.getStatusCode().value() + "): " + detail);
                     return;
                 } catch (Exception e) {
                     String errMsg = e.getMessage();
-                    log.error("API调用异常: {}", errMsg);
+                    log.error("API调用异常: {}", errMsg, e);
                     onError.accept("API调用失败: " + errMsg);
                     return;
                 }
@@ -349,7 +350,7 @@ public class AiChatService {
     // ==================== GLM 路径 (内置 web_search 工具) ====================
 
     private void toolCallingGlm(AiAssistant assistant, Long conversationId, List<Message> messages,
-                                List<String> toolDefs,
+                                List<String> toolDefs, boolean webSearch,
                                 Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
                                 Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
         try {
@@ -369,7 +370,7 @@ public class AiChatService {
             if (!toolDefs.isEmpty()) {
                 ObjectNode toolPromptMsg = objectMapper.createObjectNode();
                 toolPromptMsg.put("role", "system");
-                toolPromptMsg.put("content", buildToolAvailabilityPrompt(toolDefs));
+                toolPromptMsg.put("content", buildToolAvailabilityPrompt(toolDefs, webSearch));
                 int insertIndex = Math.min(1, glmMessages.size());
                 glmMessages.add(insertIndex, toolPromptMsg);
             }
@@ -403,11 +404,22 @@ public class AiChatService {
             String bodyJson = objectMapper.writeValueAsString(requestBody);
             log.info("GLM请求(带web_search): {}", bodyJson);
 
-            String responseJson = webClient.post()
-                    .bodyValue(bodyJson)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String responseJson;
+            try {
+                responseJson = webClient.post()
+                        .bodyValue(bodyJson)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .block();
+            } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+                String errBody = e.getResponseBodyAsString();
+                String statusText = e.getStatusText() != null ? e.getStatusText() : "";
+                log.error("GLM API返回错误 {} {}: body=[{}] url={}", e.getStatusCode(), statusText, errBody, url);
+                String detail = !errBody.isEmpty() ? errBody
+                        : "status=" + e.getStatusCode().value() + " " + statusText + ", url=" + url;
+                onError.accept("GLM API调用失败(" + e.getStatusCode().value() + "): " + detail);
+                return;
+            }
 
             if (responseJson == null) {
                 onError.accept("GLM返回为空");
@@ -417,7 +429,7 @@ public class AiChatService {
             JsonNode node = objectMapper.readTree(responseJson);
             JsonNode choices = node.get("choices");
             if (choices == null || !choices.isArray() || choices.isEmpty()) {
-                onError.accept("GLM响应格式错误");
+                onError.accept("GLM响应格式错误: " + responseJson.substring(0, Math.min(500, responseJson.length())));
                 return;
             }
 
@@ -519,7 +531,16 @@ public class AiChatService {
                                 }
                             },
                             error -> {
-                                onError.accept("GLM流式调用失败: " + error.getMessage());
+                                if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException wcre) {
+                                    String errBody = wcre.getResponseBodyAsString();
+                                    String statusText = wcre.getStatusText() != null ? wcre.getStatusText() : "";
+                                    log.error("GLM流式 API返回错误 {} {}: body=[{}]", wcre.getStatusCode(), statusText, errBody);
+                                    String detail = !errBody.isEmpty() ? errBody
+                                            : "status=" + wcre.getStatusCode().value() + " " + statusText;
+                                    onError.accept("GLM流式调用失败(" + wcre.getStatusCode().value() + "): " + detail);
+                                } else {
+                                    onError.accept("GLM流式调用失败: " + error.getMessage());
+                                }
                             },
                             () -> {
                                 String completeContent = cleanToolArtifacts(fullResponse.toString());
@@ -661,13 +682,22 @@ public class AiChatService {
                             }
                         },
                         error -> {
-                            String errorMsg = error.getMessage();
-                            if (errorMsg != null && errorMsg.contains("400")) {
-                                onError.accept("GLM API调用失败(400)：请检查模型名称和temperature(0-1)。原始错误: " + errorMsg);
-                            } else if (errorMsg != null && errorMsg.contains("401")) {
-                                onError.accept("GLM API认证失败(401)：请检查API Key。");
+                            if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException wcre) {
+                                String errBody = wcre.getResponseBodyAsString();
+                                String statusText = wcre.getStatusText() != null ? wcre.getStatusText() : "";
+                                log.error("GLM API返回错误 {} {}: body=[{}]", wcre.getStatusCode(), statusText, errBody);
+                                String detail = !errBody.isEmpty() ? errBody
+                                        : "status=" + wcre.getStatusCode().value() + " " + statusText;
+                                onError.accept("GLM API调用失败(" + wcre.getStatusCode().value() + "): " + detail);
                             } else {
-                                onError.accept("GLM API调用失败: " + errorMsg);
+                                String errorMsg = error.getMessage();
+                                if (errorMsg != null && errorMsg.contains("400")) {
+                                    onError.accept("GLM API调用失败(400)：请检查模型名称和temperature(0-1)。原始错误: " + errorMsg);
+                                } else if (errorMsg != null && errorMsg.contains("401")) {
+                                    onError.accept("GLM API认证失败(401)：请检查API Key。");
+                                } else {
+                                    onError.accept("GLM API调用失败: " + errorMsg);
+                                }
                             }
                         },
                         () -> {
@@ -773,9 +803,6 @@ public class AiChatService {
                 if (baseUrl.endsWith("/")) {
                     baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
                 }
-                if (baseUrl.endsWith("/v1")) {
-                    baseUrl = baseUrl.substring(0, baseUrl.length() - 3);
-                }
                 // 去掉用户可能带的 /chat/completions 后缀
                 if (baseUrl.endsWith("/chat/completions")) {
                     baseUrl = baseUrl.substring(0, baseUrl.length() - "/chat/completions".length());
@@ -824,12 +851,18 @@ public class AiChatService {
                     .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + assistant.getApiKey())
                     .build();
 
-            String responseJson = webClient.post()
-                    .uri(url)
-                    .bodyValue(mapper.writeValueAsString(requestBody))
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String responseJson;
+            try {
+                responseJson = webClient.post()
+                        .uri(url)
+                        .bodyValue(mapper.writeValueAsString(requestBody))
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .block();
+            } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+                log.warn("GLM摘要 API返回错误 {} {}: body=[{}]", e.getStatusCode(), e.getStatusText(), e.getResponseBodyAsString());
+                return null;
+            }
 
             if (responseJson != null) {
                 JsonNode node = objectMapper.readTree(responseJson);
@@ -893,10 +926,11 @@ public class AiChatService {
         return content;
     }
 
-    private String buildToolAvailabilityPrompt(List<String> toolDefs) {
+    private String buildToolAvailabilityPrompt(List<String> toolDefs, boolean webSearch) {
         StringBuilder sb = new StringBuilder();
         sb.append("## 工具能力\n");
         sb.append("你拥有以下工具，可以默默使用，无需告知用户：\n");
+        boolean hasWebTool = false;
         for (String toolDefJson : toolDefs) {
             try {
                 JsonNode def = objectMapper.readTree(toolDefJson);
@@ -904,14 +938,26 @@ public class AiChatService {
                 String name = func.get("name").asText();
                 String desc = func.get("description").asText();
                 sb.append("- ").append(name).append(": ").append(desc).append("\n");
+                if ("web_fetch".equals(name) || "web_search".equals(name)) {
+                    hasWebTool = true;
+                }
             } catch (Exception ignored) {}
         }
         sb.append("\n## 行为规则\n");
-        sb.append("1. 当用户的消息中包含URL链接、或需要查询实时网络信息时，直接调用工具获取内容，不要说你无法访问网络。\n");
-        sb.append("2. 调用工具后，基于获取到的内容自然地回答用户，就像你本来就知道这些信息一样。\n");
-        sb.append("3. 绝对不要在回复中展示工具调用的过程、参数、JSON、函数名等技术细节。用户不需要知道你调用了什么工具。\n");
-        sb.append("4. 不要输出类似 web_fetch、{\"url\":...}、function_call 之类的内容。\n");
-        sb.append("5. 用自然、亲切、简洁的语气交流，像一个聪明的朋友在帮忙，不要用机械的口吻。\n");
+        if (webSearch && hasWebTool) {
+            sb.append("1. 【联网搜索已开启】你必须在回复前调用 web_search 或 web_fetch 工具获取最新信息。绝对不能说你无法访问网络或基于训练数据直接回答需要实时信息的问题。\n");
+            sb.append("2. 对于任何涉及时事、天气、新闻、股价、赛事、价格等需要实时数据的问题，必须先搜索再回答。\n");
+            sb.append("3. 调用工具后，基于获取到的内容自然地回答用户，就像你本来就知道这些信息一样。\n");
+            sb.append("4. 绝对不要在回复中展示工具调用的过程、参数、JSON、函数名等技术细节。用户不需要知道你调用了什么工具。\n");
+            sb.append("5. 不要输出类似 web_fetch、{\"url\":...}、function_call 之类的内容。\n");
+            sb.append("6. 用自然、亲切、简洁的语气交流，像一个聪明的朋友在帮忙，不要用机械的口吻。\n");
+        } else {
+            sb.append("1. 当用户的消息中包含URL链接、或需要查询实时网络信息时，直接调用工具获取内容，不要说你无法访问网络。\n");
+            sb.append("2. 调用工具后，基于获取到的内容自然地回答用户，就像你本来就知道这些信息一样。\n");
+            sb.append("3. 绝对不要在回复中展示工具调用的过程、参数、JSON、函数名等技术细节。用户不需要知道你调用了什么工具。\n");
+            sb.append("4. 不要输出类似 web_fetch、{\"url\":...}、function_call 之类的内容。\n");
+            sb.append("5. 用自然、亲切、简洁的语气交流，像一个聪明的朋友在帮忙，不要用机械的口吻。\n");
+        }
         return sb.toString();
     }
 

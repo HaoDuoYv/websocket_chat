@@ -373,6 +373,12 @@ export function useWebSocket() {
       }
 
       // AI相关事件
+      case 'ai:chat:thinking': {
+        const aiStore = useAiStore()
+        aiStore.setThinking(true)
+        break
+      }
+
       case 'ai:chat:stream': {
         const aiStore = useAiStore()
         const { token, done } = event.data
@@ -555,10 +561,10 @@ export function useWebSocket() {
   }
 
   // AI相关函数
-  const sendAiChat = (assistantId: string, content: string, conversationId?: string) => {
+  const sendAiChat = (assistantId: string, content: string, conversationId?: string, webSearch?: boolean) => {
     const aiChatEvent: WebSocketEvent = {
       type: 'ai:chat',
-      data: { assistantId, content, conversationId }
+      data: { assistantId, content, conversationId, webSearch: webSearch || false }
     }
     sharedSocket?.send(JSON.stringify(aiChatEvent))
   }

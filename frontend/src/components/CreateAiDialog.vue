@@ -211,7 +211,7 @@ const form = reactive({
   systemPrompt: '',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
-  model: 'gpt-4o',
+  model: '',
   temperature: 0.7,
   avatarIcon: '✨',
   avatarColor: colors[0],
@@ -230,7 +230,6 @@ watch(selectedProvider, (provider) => {
   const preset = getPresetByProvider(provider)
   if (preset && provider !== 'custom') {
     form.baseUrl = preset.baseUrl
-    form.model = preset.model
   }
 })
 
