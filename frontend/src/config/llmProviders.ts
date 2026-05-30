@@ -31,9 +31,9 @@ export const LLM_PROVIDER_PRESETS: Record<string, LlmProviderPreset> = {
     description: '月之暗面 API'
   },
   mimo: {
-    label: 'Mimo',
-    baseUrl: 'https://api.mimo.com',
-    description: 'Mimo API'
+    label: '小米 MiMo',
+    baseUrl: 'https://api.xiaomimimo.com/v1',
+    description: '小米 MiMo API'
   },
   custom: {
     label: '自定义',

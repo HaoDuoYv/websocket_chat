@@ -26,8 +26,10 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
-import reactor.netty.http.client.HttpClient;
-import reactor.netty.http.client.HttpClientConnector;
+import org.springframework.http.client.reactive.JdkClientHttpConnector;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,12 +61,16 @@ public class AiChatService {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * 使用 Reactor Netty HttpClient 构建 WebClient，避免 JDK HttpClient 的 TLS 握手失败问题。
+     * 使用 JDK 内置 HttpClient 构建 WebClient，避免 Netty SslHandler 与阿里云等服务器的 TLS 握手失败问题。
+     * JDK 原生 TLS 栈对阿里云 DashScope 等服务的兼容性更好。
      */
     private WebClient.Builder webClientBuilder() {
-        HttpClient httpClient = HttpClient.create();
+        HttpClient jdkHttpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(30))
+                .build();
+
         return WebClient.builder()
-                .clientConnector(new HttpClientConnector(httpClient))
+                .clientConnector(new JdkClientHttpConnector(jdkHttpClient))
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(2 * 1024 * 1024));
     }
 
