@@ -105,6 +105,12 @@
             <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Reactor Netty HttpClient (fix TLS handshake with Dashscope/Alibaba Cloud) -->
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty-http</artifactId>
+        </dependency>
+
         <!-- Jsoup for web fetch tool -->
         <dependency>
             <groupId>org.jsoup</groupId>
@@ -144,6 +150,7 @@
     </repositories>
     
     <build>
+        <finalName>websocketChatServer</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

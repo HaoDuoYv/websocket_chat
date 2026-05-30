@@ -26,6 +26,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.http.client.HttpClientConnector;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +57,16 @@ public class AiChatService {
     private static final int SUMMARY_THRESHOLD = 20;
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AiChatService.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 使用 Reactor Netty HttpClient 构建 WebClient，避免 JDK HttpClient 的 TLS 握手失败问题。
+     */
+    private WebClient.Builder webClientBuilder() {
+        HttpClient httpClient = HttpClient.create();
+        return WebClient.builder()
+                .clientConnector(new HttpClientConnector(httpClient))
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(2 * 1024 * 1024));
+    }
 
     public AiMessage saveUserMessage(Long conversationId, String content) {
         AiMessage message = new AiMessage();
@@ -144,10 +156,9 @@ public class AiChatService {
         try {
             double temp = assistant.getTemperature() != null ? assistant.getTemperature() : 0.7;
 
-            WebClient webClient = WebClient.builder()
+            WebClient webClient = webClientBuilder()
                     .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + assistant.getApiKey())
-                    .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
                     .build();
 
             // 将 Spring AI Message 转为 JSON messages 数组
@@ -375,11 +386,10 @@ public class AiChatService {
                 glmMessages.add(insertIndex, toolPromptMsg);
             }
 
-            WebClient webClient = WebClient.builder()
+            WebClient webClient = webClientBuilder()
                     .baseUrl(url)
                     .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + assistant.getApiKey())
-                    .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
                     .build();
 
             // 第一次调用：启用 GLM 内置 web_search 工具
@@ -643,11 +653,10 @@ public class AiChatService {
             String bodyJson = mapper.writeValueAsString(requestBody);
             log.info("GLM请求: {}", bodyJson);
 
-            WebClient webClient = WebClient.builder()
+            WebClient webClient = webClientBuilder()
                     .baseUrl(url)
                     .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + assistant.getApiKey())
-                    .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
                     .build();
 
             StringBuilder fullResponse = new StringBuilder();
@@ -846,7 +855,7 @@ public class AiChatService {
             userMsg.put("role", "user");
             userMsg.put("content", history);
 
-            WebClient webClient = WebClient.builder()
+            WebClient webClient = webClientBuilder()
                     .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + assistant.getApiKey())
                     .build();
