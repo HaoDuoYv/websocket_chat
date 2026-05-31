@@ -181,6 +181,9 @@ export function useWebSocket() {
       case 'message:new': {
         const receivedMsg = event.data as Message
         store.addMessage(receivedMsg)
+        if (receivedMsg.senderType === 'assistant' && receivedMsg.content === '') {
+          store.startStreaming(receivedMsg.id)
+        }
         if (String(receivedMsg.senderId) === currentUserId) {
           readReceipts.value.delete(String(receivedMsg.roomId))
         }
@@ -211,6 +214,24 @@ export function useWebSocket() {
           readReceipts.value.delete(String(fileMsgData.roomId))
         }
         showMessageNotification(fileMsgData.senderName, '[文件]')
+        break
+      }
+
+      case 'message:patch': {
+        const data = event.data as { messageId: string; delta: string }
+        store.appendDelta(data.messageId, data.delta)
+        break
+      }
+
+      case 'message:complete': {
+        const data = event.data as { messageId: string; finalContent: string }
+        store.completeStreaming(data.messageId, data.finalContent)
+        break
+      }
+
+      case 'message:error': {
+        const data = event.data as { messageId: string; error: string }
+        store.errorStreaming(data.messageId, '[智能体回复失败: ' + data.error + ']')
         break
       }
 

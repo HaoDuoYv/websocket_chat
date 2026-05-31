@@ -26,6 +26,7 @@ export interface Message {
   timestamp: number
   seq: number
   type?: 'text' | 'file' | 'system'
+  senderType?: 'user' | 'assistant'
   fileInfo?: FileInfo
   fileId?: string
   fileName?: string
@@ -78,6 +79,34 @@ export const useChatStore = defineStore('chat', () => {
   const unreadMentionCount = ref<Record<string, number>>({})
   const latestMention = ref<Record<string, any>>({})
   const roomMembers = ref<User[]>([])
+  const streamingMessageIds = ref<Set<string>>(new Set())
+
+  function startStreaming(messageId: string) {
+    streamingMessageIds.value = new Set([...streamingMessageIds.value, messageId])
+  }
+
+  function appendDelta(messageId: string, delta: string) {
+    const msg = messages.value.find(m => m.id === messageId)
+    if (msg) {
+      msg.content = (msg.content || '') + delta
+    }
+  }
+
+  function completeStreaming(messageId: string, finalContent: string) {
+    const msg = messages.value.find(m => m.id === messageId)
+    if (msg) msg.content = finalContent
+    const next = new Set(streamingMessageIds.value)
+    next.delete(messageId)
+    streamingMessageIds.value = next
+  }
+
+  function errorStreaming(messageId: string, errorContent: string) {
+    const msg = messages.value.find(m => m.id === messageId)
+    if (msg) msg.content = errorContent
+    const next = new Set(streamingMessageIds.value)
+    next.delete(messageId)
+    streamingMessageIds.value = next
+  }
 
   const roomMessages = computed(() => {
     return messages.value
@@ -239,6 +268,11 @@ export const useChatStore = defineStore('chat', () => {
     unreadMentionCount,
     latestMention,
     roomMembers,
+    streamingMessageIds,
+    startStreaming,
+    appendDelta,
+    completeStreaming,
+    errorStreaming,
     roomMessages,
     currentRoom,
     getUnreadCount,
