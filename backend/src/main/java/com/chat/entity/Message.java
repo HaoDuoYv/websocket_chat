@@ -22,6 +22,9 @@ public class Message {
     @JsonSerialize(using = ToStringSerializer.class)
     private Long senderId;
 
+    @Column(name = "sender_type", nullable = false, length = 16)
+    private String senderType = "user";
+
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
@@ -146,5 +149,13 @@ public class Message {
 
     public void setFileType(String fileType) {
         this.fileType = fileType;
+    }
+
+    public String getSenderType() {
+        return senderType;
+    }
+
+    public void setSenderType(String senderType) {
+        this.senderType = senderType;
     }
 }

@@ -27,6 +27,9 @@ public class RoomMember {
     @Column(name = "last_read_seq")
     private Long lastReadSeq = 0L;
 
+    @Column(name = "member_type", nullable = false, length = 16)
+    private String memberType = "user";
+
     public RoomMember() {
     }
 
@@ -60,5 +63,13 @@ public class RoomMember {
 
     public void setLastReadSeq(Long lastReadSeq) {
         this.lastReadSeq = lastReadSeq;
+    }
+
+    public String getMemberType() {
+        return memberType;
+    }
+
+    public void setMemberType(String memberType) {
+        this.memberType = memberType;
     }
 }
