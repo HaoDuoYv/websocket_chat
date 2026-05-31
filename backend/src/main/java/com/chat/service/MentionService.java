@@ -1,5 +1,6 @@
 package com.chat.service;
 
+import com.chat.entity.AiAssistant;
 import com.chat.entity.Mention;
 import com.chat.entity.MentionReadReceipt;
 import com.chat.entity.Message;
@@ -29,6 +30,9 @@ public class MentionService {
 
     @Autowired
     private RoomMemberRepository roomMemberRepository;
+
+    @Autowired
+    private AiAssistantService aiAssistantService;
 
     @Autowired
     private SnowflakeIdGenerator snowflakeIdGenerator;
@@ -128,5 +132,22 @@ public class MentionService {
                 .stream()
                 .map(member -> member.getUserId())
                 .toList();
+    }
+
+    public List<AiAssistant> extractAssistantMentions(Long roomId, List<Long> mentionedIds) {
+        if (mentionedIds == null || mentionedIds.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        List<AiAssistant> result = new java.util.ArrayList<>();
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        for (Long id : mentionedIds) {
+            if (id == null || !seen.add(id)) continue;
+            boolean isAssistantMember = roomMemberRepository
+                    .findByRoomIdAndUserIdAndMemberType(roomId, id, "assistant")
+                    .isPresent();
+            if (!isAssistantMember) continue;
+            aiAssistantService.getAssistantById(id).ifPresent(result::add);
+        }
+        return result;
     }
 }
