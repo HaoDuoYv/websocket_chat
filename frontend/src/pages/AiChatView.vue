@@ -160,13 +160,40 @@
       </div>
 
       <!-- 输入区域 -->
-      <div class="px-6 py-4 border-t" :class="isDarkTheme ? 'border-gray-800' : 'border-gray-100'">
+      <div
+        class="px-6 py-4 border-t relative"
+        :class="[
+          isDarkTheme ? 'border-gray-800' : 'border-gray-100',
+          isDragging ? (isDarkTheme ? 'bg-blue-500/10' : 'bg-blue-50') : ''
+        ]"
+        @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
+        @drop="handleDrop"
+      >
+        <div
+          v-if="isDragging"
+          class="absolute inset-0 border-2 border-dashed rounded-lg pointer-events-none"
+          :class="isDarkTheme ? 'border-blue-500' : 'border-blue-400'"
+        ></div>
+
+        <div v-if="pendingAttachments.length > 0" class="flex flex-wrap gap-2 mb-2">
+          <AiAttachmentChip
+            v-for="a in pendingAttachments"
+            :key="a.id"
+            :attachment="a"
+            :is-dark="isDarkTheme"
+            removable
+            @remove="removeAttachment"
+          />
+        </div>
+
         <div class="flex items-center gap-3">
           <div class="flex-1">
             <textarea
               v-model="inputMessage"
               @keydown.enter.exact.prevent="handleSend"
               @input="autoResize"
+              @paste="handlePaste"
               ref="inputRef"
               placeholder="输入消息..."
               rows="1"
@@ -177,6 +204,28 @@
               style="max-height: 120px; min-height: 40px;"
             />
             <div class="flex items-center gap-3 mt-2">
+              <button
+                @click="fileInputRef?.click()"
+                type="button"
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer"
+                :class="isDarkTheme
+                  ? 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'"
+                title="附加文件"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                </svg>
+                附件
+              </button>
+              <input
+                ref="fileInputRef"
+                type="file"
+                multiple
+                :accept="FILE_INPUT_ACCEPT"
+                class="hidden"
+                @change="handleFileInputChange"
+              />
               <button
                 @click="webSearchEnabled = !webSearchEnabled"
                 class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer"
@@ -194,10 +243,10 @@
           </div>
           <button
             @click="handleSend"
-            :disabled="!inputMessage.trim() || isStreaming || isThinking"
+            :disabled="(!inputMessage.trim() && pendingAttachments.length === 0) || isStreaming || isThinking"
             class="w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-            :class="isDarkTheme 
-              ? 'bg-white/10 text-white hover:bg-white/15' 
+            :class="isDarkTheme
+              ? 'bg-white/10 text-white hover:bg-white/15'
               : 'bg-[#18181B] text-white hover:bg-[#27272A]'"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -282,6 +331,13 @@ import { useAiStore } from '@/stores/ai'
 import { useWebSocket } from '@/composables/useWebSocket'
 import type { AiConversation } from '@/stores/ai'
 import MessageList from '@/components/MessageList.vue'
+import AiAttachmentChip from '@/components/AiAttachmentChip.vue'
+import {
+  buildPendingAttachment,
+  FILE_INPUT_ACCEPT,
+  MAX_ATTACHMENTS,
+  type PendingAttachment
+} from '@/utils/aiAttachment'
 import AvatarUpload from '@/components/AvatarUpload.vue'
 import { uploadAiAvatar } from '@/api/avatar'
 import { useToast } from '@/composables/useToast'
@@ -319,6 +375,9 @@ const contextSize = ref(10)
 const webSearchEnabled = ref(false)
 const messagesContainer = ref<InstanceType<typeof MessageList> | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
+const pendingAttachments = ref<PendingAttachment[]>([])
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const isDragging = ref(false)
 const isAvatarDialogOpen = ref(false)
 const avatarUploadRef = ref<InstanceType<typeof AvatarUpload> | null>(null)
 const isUploadingAvatar = ref(false)
@@ -433,14 +492,90 @@ async function handleAvatarUpload(file: File) {
   }
 }
 
+async function addFiles(files: FileList | File[]) {
+  const arr = Array.from(files)
+  for (const file of arr) {
+    if (pendingAttachments.value.length >= MAX_ATTACHMENTS) {
+      toast.error(`最多同时附加 ${MAX_ATTACHMENTS} 个文件`)
+      return
+    }
+    const result = await buildPendingAttachment(file)
+    if ('error' in result) {
+      toast.error(result.error)
+      continue
+    }
+    pendingAttachments.value.push(result)
+  }
+}
+
+function removeAttachment(id: string) {
+  pendingAttachments.value = pendingAttachments.value.filter(a => a.id !== id)
+}
+
+function handleFileInputChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    addFiles(target.files)
+    target.value = ''
+  }
+}
+
+function handlePaste(e: ClipboardEvent) {
+  if (!e.clipboardData) return
+  const files: File[] = []
+  for (const item of Array.from(e.clipboardData.items)) {
+    if (item.kind === 'file') {
+      const f = item.getAsFile()
+      if (f) files.push(f)
+    }
+  }
+  if (files.length > 0) {
+    e.preventDefault()
+    addFiles(files)
+  }
+}
+
+function handleDragOver(e: DragEvent) {
+  e.preventDefault()
+  isDragging.value = true
+}
+
+function handleDragLeave(e: DragEvent) {
+  e.preventDefault()
+  isDragging.value = false
+}
+
+function handleDrop(e: DragEvent) {
+  e.preventDefault()
+  isDragging.value = false
+  if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+    addFiles(e.dataTransfer.files)
+  }
+}
+
 function handleSend() {
   const content = inputMessage.value.trim()
-  if (!content || isStreaming.value || isThinking.value) return
+  const hasAttachments = pendingAttachments.value.length > 0
+  if ((!content && !hasAttachments) || isStreaming.value || isThinking.value) return
 
   aiStore.clearError()
   aiStore.clearToolCalls()
   aiStore.setThinking(true)
-  
+
+  const attachmentsForWs = pendingAttachments.value.map(a => ({
+    kind: a.kind,
+    name: a.name,
+    mimeType: a.mimeType,
+    data: a.data
+  }))
+  const attachmentsForLocal = pendingAttachments.value.map(a => ({
+    kind: a.kind,
+    name: a.name,
+    mimeType: a.mimeType,
+    size: a.size,
+    data: a.kind === 'image' ? (a.previewUrl || '') : a.data
+  }))
+
   const userMessage = {
     id: Date.now().toString(),
     conversationId: currentConversation.value?.id || '',
@@ -448,13 +583,22 @@ function handleSend() {
     senderId: 'user',
     senderName: '我',
     content,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    attachments: attachmentsForLocal
   }
-  aiStore.addMessage(userMessage)
+  aiStore.addMessage(userMessage as any)
 
-  sendAiChat(assistantId.value, content, currentConversation.value?.id, webSearchEnabled.value)
+  sendAiChat(
+    assistantId.value,
+    content,
+    currentConversation.value?.id,
+    webSearchEnabled.value,
+    attachmentsForWs
+  )
+
   inputMessage.value = ''
-  
+  pendingAttachments.value = []
+
   nextTick(() => {
     if (inputRef.value) {
       inputRef.value.style.height = 'auto'
