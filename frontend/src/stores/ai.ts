@@ -1,6 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+export interface MessageAttachment {
+  kind: 'image' | 'text'
+  name: string
+  mimeType: string
+  size?: number
+  data: string
+}
+
 export interface AiAssistant {
   id: string
   name: string
@@ -39,6 +47,7 @@ export interface AiMessage {
   content: string
   tokenCount?: number
   createdAt: number
+  attachments?: MessageAttachment[]
 }
 
 export interface ToolCallState {
