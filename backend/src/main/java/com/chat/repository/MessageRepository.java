@@ -34,4 +34,8 @@ public interface MessageRepository extends JpaRepository<Message, String> {
            "(SELECT m2.id FROM Message m2 WHERE m2.roomId IN :roomIds " +
            "GROUP BY m2.roomId HAVING m2.seq = MAX(m2.seq))")
     List<Message> findLatestMessagesByRoomIds(@Param("roomIds") List<Long> roomIds);
+
+    @Query("SELECT m FROM Message m WHERE m.roomId = :roomId ORDER BY m.seq DESC")
+    List<Message> findRecentByRoomId(@Param("roomId") Long roomId,
+                                     org.springframework.data.domain.Pageable pageable);
 }
