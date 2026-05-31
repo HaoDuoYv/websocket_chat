@@ -62,6 +62,14 @@ public class MessageService {
     }
 
     @Transactional
+    public Message updateContent(String messageId, String content) {
+        Message msg = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("消息不存在"));
+        msg.setContent(content);
+        return messageRepository.save(msg);
+    }
+
+    @Transactional
     public Message sendFileMessage(Long roomId, Long senderId, String content,
                                    String fileId, String fileName, String fileUrl,
                                    Long fileSize, String fileType) {

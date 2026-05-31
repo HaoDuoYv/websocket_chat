@@ -1244,6 +1244,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 }
             }
         }
+
+        // 触发被 @ 的智能体异步流式回复
+        if (isMentionAll) {
+            return;
+        }
+        List<AiAssistant> targetAssistants = mentionService.extractAssistantMentions(roomId, mentionedUserIds);
+        for (AiAssistant assistant : targetAssistants) {
+            triggerAssistantReply(roomId, assistant, content, senderId, session);
+        }
     }
 
     private void handleMentionRead(WebSocketSession session, Map<String, Object> data) throws IOException {
@@ -1368,5 +1377,115 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sendToSession(session.getId(), new Event("room:assistant:available:result", Map.of(
                 "assistants", assistants
         )));
+    }
+
+    private void triggerAssistantReply(Long roomId, AiAssistant assistant, String triggerContent,
+                                       Long triggerUserId, WebSocketSession triggerSession) {
+        long now = System.currentTimeMillis();
+        var acquireResult = invocationManager.tryAcquire(roomId, assistant.getId(), now);
+        if (acquireResult == GroupAssistantInvocationManager.AcquireResult.IN_FLIGHT) {
+            sendToSession(triggerSession.getId(), new Event("room:assistant:error", Map.of(
+                    "roomId", String.valueOf(roomId),
+                    "assistantId", String.valueOf(assistant.getId()),
+                    "message", "智能体忙碌中，请等当前回复结束"
+            )));
+            return;
+        }
+        if (acquireResult == GroupAssistantInvocationManager.AcquireResult.DEBOUNCED) {
+            sendToSession(triggerSession.getId(), new Event("room:assistant:error", Map.of(
+                    "roomId", String.valueOf(roomId),
+                    "assistantId", String.valueOf(assistant.getId()),
+                    "message", "请稍后再试"
+            )));
+            return;
+        }
+
+        Message placeholder = messageService.sendMessage(
+                roomId, assistant.getId(), "", "text", "assistant");
+        invocationManager.setInFlightMessageId(roomId, assistant.getId(), placeholder.getId());
+
+        try {
+            broadcastToRoomMembers(roomId, new Event("message:new", Map.of(
+                    "id", placeholder.getId(),
+                    "roomId", String.valueOf(roomId),
+                    "senderId", String.valueOf(assistant.getId()),
+                    "senderName", assistant.getName(),
+                    "senderType", "assistant",
+                    "content", "",
+                    "type", "text",
+                    "seq", placeholder.getSeq(),
+                    "timestamp", placeholder.getTimestamp()
+            )));
+        } catch (IOException e) {
+            logger.warn("广播智能体占位消息失败: {}", e.getMessage());
+        }
+
+        StringBuilder buf = new StringBuilder();
+        boolean submitted = groupAssistantExecutor.submit(() -> {
+            try {
+                aiChatService.streamGroupChat(assistant.getId(), roomId, triggerContent,
+                        delta -> {
+                            buf.append(delta);
+                            try {
+                                broadcastToRoomMembers(roomId, new Event("message:patch", Map.of(
+                                        "messageId", placeholder.getId(),
+                                        "delta", delta
+                                )));
+                            } catch (IOException e) {
+                                logger.warn("广播智能体增量失败: {}", e.getMessage());
+                            }
+                        },
+                        finalContent -> {
+                            String text = finalContent == null ? buf.toString() : finalContent;
+                            messageService.updateContent(placeholder.getId(), text);
+                            try {
+                                broadcastToRoomMembers(roomId, new Event("message:complete", Map.of(
+                                        "messageId", placeholder.getId(),
+                                        "finalContent", text
+                                )));
+                            } catch (IOException e) {
+                                logger.warn("广播智能体完成事件失败: {}", e.getMessage());
+                            }
+                            invocationManager.release(roomId, assistant.getId());
+                        },
+                        err -> {
+                            String text = "[智能体回复失败: " + err + "]";
+                            messageService.updateContent(placeholder.getId(), text);
+                            try {
+                                broadcastToRoomMembers(roomId, new Event("message:error", Map.of(
+                                        "messageId", placeholder.getId(),
+                                        "error", err
+                                )));
+                            } catch (IOException e) {
+                                logger.warn("广播智能体错误事件失败: {}", e.getMessage());
+                            }
+                            invocationManager.release(roomId, assistant.getId());
+                        });
+            } catch (Throwable t) {
+                messageService.updateContent(placeholder.getId(), "[智能体回复失败: " + t.getMessage() + "]");
+                try {
+                    broadcastToRoomMembers(roomId, new Event("message:error", Map.of(
+                            "messageId", placeholder.getId(),
+                            "error", t.getMessage() == null ? "未知错误" : t.getMessage()
+                    )));
+                } catch (IOException e) {
+                    logger.warn("广播智能体异常事件失败: {}", e.getMessage());
+                }
+                invocationManager.release(roomId, assistant.getId());
+            }
+        });
+
+        if (!submitted) {
+            messageService.updateContent(placeholder.getId(), "[智能体回复失败: 服务繁忙]");
+            try {
+                broadcastToRoomMembers(roomId, new Event("message:error", Map.of(
+                        "messageId", placeholder.getId(),
+                        "error", "服务繁忙"
+                )));
+            } catch (IOException e) {
+                logger.warn("广播智能体繁忙事件失败: {}", e.getMessage());
+            }
+            invocationManager.release(roomId, assistant.getId());
+        }
     }
 }
