@@ -50,11 +50,10 @@
 import { ref } from 'vue'
 import type { MessageAttachment } from '@/stores/ai'
 
-const props = defineProps<{
+defineProps<{
   attachments: MessageAttachment[]
   isDark: boolean
 }>()
-void props
 
 const expanded = ref<Record<number, boolean>>({})
 const lightbox = ref<string | null>(null)
