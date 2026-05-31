@@ -45,10 +45,16 @@ public class AiChatService {
     private AiMessageRepository aiMessageRepository;
 
     @Autowired
+    private com.chat.repository.MessageRepository messageRepository;
+
+    @Autowired
     private AiConversationService aiConversationService;
 
     @Autowired
     private AiAssistantService aiAssistantService;
+
+    @Autowired
+    private UserService userService;
 
     @Autowired
     private ToolCallingService toolCallingService;
@@ -389,8 +395,10 @@ public class AiChatService {
                         }
                     }
 
-                    aiConversationService.incrementMessageCount(conversationId);
-                    checkAndSummarize(conversationId, assistant);
+                    if (conversationId != null) {
+                        aiConversationService.incrementMessageCount(conversationId);
+                        checkAndSummarize(conversationId, assistant);
+                    }
                     onComplete.accept(assistantContent);
                     return;
                 }
@@ -420,8 +428,28 @@ public class AiChatService {
             temp = Math.min(temp, 1.0);
             temp = Math.max(temp, 0.0);
 
-            // 构建消息列表
-            List<ObjectNode> glmMessages = buildGlmMessages(assistant, conversationId);
+            // 构建消息列表（群聊模式 conversationId=null 时直接转换传入的 messages）
+            List<ObjectNode> glmMessages;
+            if (conversationId != null) {
+                glmMessages = buildGlmMessages(assistant, conversationId);
+            } else {
+                glmMessages = new ArrayList<>();
+                for (Message msg : messages) {
+                    ObjectNode msgNode = objectMapper.createObjectNode();
+                    String text = msg.getText();
+                    if (msg instanceof SystemMessage) {
+                        msgNode.put("role", "system");
+                    } else if (msg instanceof UserMessage) {
+                        msgNode.put("role", "user");
+                    } else if (msg instanceof AssistantMessage) {
+                        msgNode.put("role", "assistant");
+                    } else {
+                        msgNode.put("role", "user");
+                    }
+                    msgNode.put("content", text != null ? text : "");
+                    glmMessages.add(msgNode);
+                }
+            }
 
             if (attachments != null && !attachments.isEmpty()) {
                 for (int i = glmMessages.size() - 1; i >= 0; i--) {
@@ -615,15 +643,19 @@ public class AiChatService {
                             },
                             () -> {
                                 String completeContent = cleanToolArtifacts(fullResponse.toString());
-                                aiConversationService.incrementMessageCount(conversationId);
-                                checkAndSummarize(conversationId, assistant);
+                                if (conversationId != null) {
+                                    aiConversationService.incrementMessageCount(conversationId);
+                                    checkAndSummarize(conversationId, assistant);
+                                }
                                 onComplete.accept(completeContent);
                             }
                         );
             } else {
                 // 没有搜索结果，直接返回文本
-                aiConversationService.incrementMessageCount(conversationId);
-                checkAndSummarize(conversationId, assistant);
+                if (conversationId != null) {
+                    aiConversationService.incrementMessageCount(conversationId);
+                    checkAndSummarize(conversationId, assistant);
+                }
                 onComplete.accept(cleanToolArtifacts(content));
             }
 
@@ -1094,5 +1126,76 @@ public class AiChatService {
 
     public List<AiMessage> getConversationMessages(Long conversationId) {
         return aiMessageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+    }
+
+    /**
+     * 群聊场景的流式调用：从群消息读最近 50 条作为上下文，
+     * 不写 ai_messages 表（群聊归宿是 messages 表）。
+     */
+    public void streamGroupChat(Long assistantId, Long roomId, String triggerContent,
+                                java.util.function.Consumer<String> onToken,
+                                java.util.function.Consumer<String> onComplete,
+                                java.util.function.Consumer<String> onError) {
+        try {
+            java.util.Optional<AiAssistant> assistantOpt = aiAssistantService.getAssistantById(assistantId);
+            if (assistantOpt.isEmpty()) {
+                onError.accept("智能体不存在");
+                return;
+            }
+            AiAssistant assistant = assistantOpt.get();
+
+            java.util.List<com.chat.entity.Message> recent = messageRepository.findRecentByRoomId(
+                    roomId, org.springframework.data.domain.PageRequest.of(0, 50));
+            java.util.Collections.reverse(recent);
+
+            java.util.List<Message> messages = new java.util.ArrayList<>();
+            String sysPrompt = (assistant.getSystemPrompt() == null ? "" : assistant.getSystemPrompt())
+                    + "\n\n你正处于群聊中，群里有多个用户和智能体。每条用户消息会以 [发送者] 前缀标明发言人。";
+            messages.add(new SystemMessage(sysPrompt));
+
+            for (com.chat.entity.Message m : recent) {
+                if (m.getContent() == null || m.getContent().isEmpty()) continue;
+                boolean isSelf = "assistant".equals(m.getSenderType())
+                        && java.util.Objects.equals(m.getSenderId(), assistantId);
+                if (isSelf) {
+                    messages.add(new AssistantMessage(m.getContent()));
+                } else {
+                    String senderName = resolveSenderName(m);
+                    messages.add(new UserMessage("[" + senderName + "] " + m.getContent()));
+                }
+            }
+
+            String baseUrl = assistant.getBaseUrl();
+            if (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+            String chatUrl;
+            if (baseUrl.endsWith("/chat/completions") || baseUrl.contains("/chat/completions?")) {
+                chatUrl = baseUrl;
+            } else {
+                chatUrl = baseUrl + "/chat/completions";
+            }
+            boolean isGlm = baseUrl.contains("open.bigmodel.cn");
+
+            java.util.List<String> toolDefs = java.util.Collections.emptyList();
+            java.util.List<java.util.Map<String, String>> attachments = java.util.Collections.emptyList();
+
+            if (isGlm) {
+                toolCallingGlm(assistant, null, messages, toolDefs, false, attachments,
+                        onToken, onComplete, onError, m -> {}, m -> {});
+            } else {
+                toolCallingOpenAi(assistant, null, messages, chatUrl, toolDefs, attachments,
+                        onToken, onComplete, onError, m -> {}, m -> {});
+            }
+        } catch (Exception e) {
+            onError.accept("AI 调用失败: " + e.getMessage());
+        }
+    }
+
+    private String resolveSenderName(com.chat.entity.Message m) {
+        if ("assistant".equals(m.getSenderType())) {
+            return aiAssistantService.getAssistantById(m.getSenderId())
+                    .map(AiAssistant::getName).orElse("智能体");
+        }
+        return userService.findById(m.getSenderId())
+                .map(u -> u.getUsername()).orElse("用户");
     }
 }
