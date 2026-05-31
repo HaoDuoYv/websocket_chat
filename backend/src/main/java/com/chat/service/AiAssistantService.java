@@ -93,6 +93,10 @@ public class AiAssistantService {
         return aiAssistantRepository.findByOwnerId(ownerId);
     }
 
+    public List<AiAssistant> getAllPublicOrSystem() {
+        return aiAssistantRepository.findByIsPublicTrueOrIsSystemTrue();
+    }
+
     public Optional<AiAssistant> getAssistantById(Long id) {
         return aiAssistantRepository.findById(id);
     }

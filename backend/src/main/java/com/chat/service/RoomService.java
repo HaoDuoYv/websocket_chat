@@ -1,5 +1,6 @@
 package com.chat.service;
 
+import com.chat.entity.AiAssistant;
 import com.chat.entity.Room;
 import com.chat.entity.RoomMember;
 import com.chat.entity.User;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -31,6 +33,9 @@ public class RoomService {
 
     @Autowired
     private UserRemarkService userRemarkService;
+
+    @Autowired
+    private AiAssistantService aiAssistantService;
 
     @Autowired
     private SnowflakeIdGenerator idGenerator;
@@ -166,5 +171,72 @@ public class RoomService {
     public void deleteRoom(Long roomId) {
         roomMemberRepository.deleteByRoomId(roomId);
         roomRepository.deleteById(roomId);
+    }
+
+    @Transactional
+    public AiAssistant addAssistantToRoom(Long roomId, Long assistantId, Long addedByUserId) {
+        AiAssistant assistant = aiAssistantService.getAssistantById(assistantId)
+                .orElseThrow(() -> new IllegalArgumentException("智能体不存在"));
+
+        boolean canAdd = Boolean.TRUE.equals(assistant.getIsSystem())
+                || Boolean.TRUE.equals(assistant.getIsPublic())
+                || Objects.equals(assistant.getOwnerId(), addedByUserId);
+        if (!canAdd) {
+            throw new IllegalArgumentException("无权使用该智能体");
+        }
+
+        boolean addedByUserInRoom = roomMemberRepository
+                .findByRoomIdAndUserIdAndMemberType(roomId, addedByUserId, "user")
+                .isPresent();
+        if (!addedByUserInRoom) {
+            throw new IllegalArgumentException("发起者不在群中");
+        }
+
+        if (roomMemberRepository.findByRoomIdAndUserIdAndMemberType(roomId, assistantId, "assistant").isPresent()) {
+            return assistant;
+        }
+
+        RoomMember member = new RoomMember();
+        member.setRoomId(roomId);
+        member.setUserId(assistantId);
+        member.setMemberType("assistant");
+        member.setJoinedAt(System.currentTimeMillis());
+        member.setLastReadSeq(0L);
+        roomMemberRepository.save(member);
+        return assistant;
+    }
+
+    @Transactional
+    public void removeAssistantFromRoom(Long roomId, Long assistantId, Long requesterUserId) {
+        RoomMember member = roomMemberRepository
+                .findByRoomIdAndUserIdAndMemberType(roomId, assistantId, "assistant")
+                .orElseThrow(() -> new IllegalArgumentException("智能体不在群中"));
+
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("群不存在"));
+        boolean isOwner = Objects.equals(room.getOwnerId(), requesterUserId);
+        if (!isOwner) {
+            throw new IllegalArgumentException("仅群主可移除智能体");
+        }
+
+        roomMemberRepository.delete(member);
+    }
+
+    public List<AiAssistant> listAssistantsInRoom(Long roomId) {
+        List<RoomMember> members = roomMemberRepository.findByRoomIdAndMemberType(roomId, "assistant");
+        List<AiAssistant> result = new java.util.ArrayList<>();
+        for (RoomMember m : members) {
+            aiAssistantService.getAssistantById(m.getUserId()).ifPresent(result::add);
+        }
+        return result;
+    }
+
+    public List<AiAssistant> listAvailableAssistantsForUser(Long userId) {
+        List<AiAssistant> own = aiAssistantService.getUserAssistants(userId);
+        List<AiAssistant> publicOnes = aiAssistantService.getAllPublicOrSystem();
+        java.util.Map<Long, AiAssistant> map = new java.util.LinkedHashMap<>();
+        for (AiAssistant a : own) map.put(a.getId(), a);
+        for (AiAssistant a : publicOnes) map.putIfAbsent(a.getId(), a);
+        return new java.util.ArrayList<>(map.values());
     }
 }
