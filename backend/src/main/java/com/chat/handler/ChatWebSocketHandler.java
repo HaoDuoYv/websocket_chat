@@ -15,6 +15,8 @@ import com.chat.service.AiAssistantService;
 import com.chat.service.AiConversationService;
 import com.chat.service.AiChatService;
 import com.chat.service.MentionService;
+import com.chat.component.GroupAssistantInvocationManager;
+import com.chat.component.GroupAssistantExecutor;
 import com.chat.vo.MentionVO;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -62,6 +64,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private MentionService mentionService;
+
+    @Autowired
+    private GroupAssistantInvocationManager invocationManager;
+
+    @Autowired
+    private GroupAssistantExecutor groupAssistantExecutor;
 
     @Autowired
     private LocalProperties localProperties;
@@ -200,6 +208,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 break;
             case "room:avatar:updated":
                 handleRoomAvatarUpdated(session, event.getData());
+                break;
+            case "room:assistant:add":
+                handleRoomAssistantAdd(session, event.getData());
+                break;
+            case "room:assistant:remove":
+                handleRoomAssistantRemove(session, event.getData());
+                break;
+            case "room:assistant:list":
+                handleRoomAssistantList(session, event.getData());
+                break;
+            case "room:assistant:available":
+                handleRoomAssistantAvailable(session, event.getData());
                 break;
         }
     }
@@ -1287,5 +1307,66 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         public void setData(Map<String, Object> data) {
             this.data = data;
         }
+    }
+
+    private void handleRoomAssistantAdd(WebSocketSession session, Map<String, Object> data) {
+        Long userId = sessionUserMap.get(session.getId());
+        if (userId == null) {
+            sendToSession(session.getId(), new Event("room:assistant:error", Map.of("message", "未登录")));
+            return;
+        }
+        Long roomId = parseLongId(data.get("roomId"));
+        Long assistantId = parseLongId(data.get("assistantId"));
+        try {
+            AiAssistant assistant = roomService.addAssistantToRoom(roomId, assistantId, userId);
+            broadcastToRoomMembers(roomId, new Event("room:assistant:added", Map.of(
+                    "roomId", String.valueOf(roomId),
+                    "assistant", assistant
+            )));
+        } catch (Exception e) {
+            sendToSession(session.getId(), new Event("room:assistant:error",
+                    Map.of("message", e.getMessage() == null ? "添加失败" : e.getMessage())));
+        }
+    }
+
+    private void handleRoomAssistantRemove(WebSocketSession session, Map<String, Object> data) {
+        Long userId = sessionUserMap.get(session.getId());
+        if (userId == null) {
+            sendToSession(session.getId(), new Event("room:assistant:error", Map.of("message", "未登录")));
+            return;
+        }
+        Long roomId = parseLongId(data.get("roomId"));
+        Long assistantId = parseLongId(data.get("assistantId"));
+        try {
+            roomService.removeAssistantFromRoom(roomId, assistantId, userId);
+            broadcastToRoomMembers(roomId, new Event("room:assistant:removed", Map.of(
+                    "roomId", String.valueOf(roomId),
+                    "assistantId", String.valueOf(assistantId)
+            )));
+        } catch (Exception e) {
+            sendToSession(session.getId(), new Event("room:assistant:error",
+                    Map.of("message", e.getMessage() == null ? "移除失败" : e.getMessage())));
+        }
+    }
+
+    private void handleRoomAssistantList(WebSocketSession session, Map<String, Object> data) {
+        Long roomId = parseLongId(data.get("roomId"));
+        List<AiAssistant> assistants = roomService.listAssistantsInRoom(roomId);
+        sendToSession(session.getId(), new Event("room:assistant:list:result", Map.of(
+                "roomId", String.valueOf(roomId),
+                "assistants", assistants
+        )));
+    }
+
+    private void handleRoomAssistantAvailable(WebSocketSession session, Map<String, Object> data) {
+        Long userId = sessionUserMap.get(session.getId());
+        if (userId == null) {
+            sendToSession(session.getId(), new Event("room:assistant:error", Map.of("message", "未登录")));
+            return;
+        }
+        List<AiAssistant> assistants = roomService.listAvailableAssistantsForUser(userId);
+        sendToSession(session.getId(), new Event("room:assistant:available:result", Map.of(
+                "assistants", assistants
+        )));
     }
 }
