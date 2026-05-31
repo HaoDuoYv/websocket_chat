@@ -3,6 +3,7 @@ import { ref, nextTick, watch } from 'vue'
 import FileMessage from '@/components/FileMessage.vue'
 import CodeBlock from '@/components/CodeBlock.vue'
 import { isImageFile } from '@/api/file'
+import AiAttachmentPreview from '@/components/AiAttachmentPreview.vue'
 
 interface Message {
   id: string
@@ -349,6 +350,12 @@ defineExpose({ scrollToBottom, scrollToMessage })
             <div v-if="!isAiMode && String(message.senderId || '') !== currentUserId" class="text-xs mb-1 ml-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
               {{ message.senderName || '' }}
             </div>
+
+            <AiAttachmentPreview
+              v-if="(message as any).attachments && (message as any).attachments.length > 0"
+              :attachments="(message as any).attachments"
+              :is-dark="isDark"
+            />
 
             <div
               :class="[
