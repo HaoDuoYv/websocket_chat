@@ -166,6 +166,7 @@
           isDarkTheme ? 'border-gray-800' : 'border-gray-100',
           isDragging ? (isDarkTheme ? 'bg-blue-500/10' : 'bg-blue-50') : ''
         ]"
+        @dragenter="handleDragEnter"
         @dragover="handleDragOver"
         @dragleave="handleDragLeave"
         @drop="handleDrop"
@@ -378,6 +379,7 @@ const inputRef = ref<HTMLTextAreaElement | null>(null)
 const pendingAttachments = ref<PendingAttachment[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const isDragging = ref(false)
+let dragCounter = 0
 const isAvatarDialogOpen = ref(false)
 const avatarUploadRef = ref<InstanceType<typeof AvatarUpload> | null>(null)
 const isUploadingAvatar = ref(false)
@@ -497,14 +499,18 @@ async function addFiles(files: FileList | File[]) {
   for (const file of arr) {
     if (pendingAttachments.value.length >= MAX_ATTACHMENTS) {
       toast.error(`最多同时附加 ${MAX_ATTACHMENTS} 个文件`)
-      return
+      break
     }
-    const result = await buildPendingAttachment(file)
-    if ('error' in result) {
-      toast.error(result.error)
-      continue
+    try {
+      const result = await buildPendingAttachment(file)
+      if ('error' in result) {
+        toast.error(result.error)
+        continue
+      }
+      pendingAttachments.value.push(result)
+    } catch (err) {
+      toast.error(`文件读取失败: ${file.name}`)
     }
-    pendingAttachments.value.push(result)
   }
 }
 
@@ -535,18 +541,29 @@ function handlePaste(e: ClipboardEvent) {
   }
 }
 
+function handleDragEnter(e: DragEvent) {
+  e.preventDefault()
+  dragCounter++
+  isDragging.value = true
+}
+
 function handleDragOver(e: DragEvent) {
   e.preventDefault()
-  isDragging.value = true
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
 }
 
 function handleDragLeave(e: DragEvent) {
   e.preventDefault()
-  isDragging.value = false
+  dragCounter--
+  if (dragCounter <= 0) {
+    dragCounter = 0
+    isDragging.value = false
+  }
 }
 
 function handleDrop(e: DragEvent) {
   e.preventDefault()
+  dragCounter = 0
   isDragging.value = false
   if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
     addFiles(e.dataTransfer.files)
@@ -586,7 +603,7 @@ function handleSend() {
     createdAt: Date.now(),
     attachments: attachmentsForLocal
   }
-  aiStore.addMessage(userMessage as any)
+  aiStore.addMessage(userMessage)
 
   sendAiChat(
     assistantId.value,
