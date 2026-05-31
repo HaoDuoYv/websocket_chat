@@ -303,6 +303,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         msgData.put("senderName", senderName);
         msgData.put("content", content);
         msgData.put("type", "text");
+        msgData.put("senderType", "user");
         msgData.put("seq", savedMessage.getSeq());
         msgData.put("timestamp", savedMessage.getTimestamp());
         if (senderAvatarUrl != null) {
@@ -1216,6 +1217,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 "senderName", senderName,
                 "content", content,
                 "type", "text",
+                "senderType", "user",
                 "seq", savedMessage.getSeq(),
                 "timestamp", savedMessage.getTimestamp()));
         broadcastToRoomMembers(roomId, receiveEvent);
