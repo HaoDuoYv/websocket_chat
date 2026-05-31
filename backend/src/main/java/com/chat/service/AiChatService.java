@@ -208,6 +208,22 @@ public class AiChatService {
                 agentMessages.add(msgNode);
             }
 
+            // 替换最后一条 user 消息为 multimodal content 数组（仅当有附件）
+            if (attachments != null && !attachments.isEmpty()) {
+                for (int i = agentMessages.size() - 1; i >= 0; i--) {
+                    ObjectNode m = agentMessages.get(i);
+                    if (m.has("role") && "user".equals(m.get("role").asText())) {
+                        String origText = m.has("content") ? m.get("content").asText() : "";
+                        ArrayNode mm = buildUserMessageContent(origText, attachments);
+                        if (mm != null) {
+                            m.remove("content");
+                            m.set("content", mm);
+                        }
+                        break;
+                    }
+                }
+            }
+
             // 构建 tools 数组（OpenAI function calling 格式）
             ArrayNode toolsArray = objectMapper.createArrayNode();
             for (String toolDefJson : toolDefs) {
@@ -406,6 +422,21 @@ public class AiChatService {
 
             // 构建消息列表
             List<ObjectNode> glmMessages = buildGlmMessages(assistant, conversationId);
+
+            if (attachments != null && !attachments.isEmpty()) {
+                for (int i = glmMessages.size() - 1; i >= 0; i--) {
+                    ObjectNode m = glmMessages.get(i);
+                    if (m.has("role") && "user".equals(m.get("role").asText())) {
+                        String origText = m.has("content") ? m.get("content").asText() : "";
+                        ArrayNode mm = buildUserMessageContent(origText, attachments);
+                        if (mm != null) {
+                            m.remove("content");
+                            m.set("content", mm);
+                        }
+                        break;
+                    }
+                }
+            }
 
             // 注入工具可用性提示
             if (!toolDefs.isEmpty()) {
@@ -963,6 +994,67 @@ public class AiChatService {
         // 清理多余空行
         content = content.replaceAll("(?m)^\\s*$\\n{2,}", "\n\n").trim();
         return content;
+    }
+
+    /**
+     * 构建当前用户消息的 multimodal content 数组。
+     * 无附件时返回 null（调用方应回退为字符串 content）。
+     */
+    private ArrayNode buildUserMessageContent(String text, List<Map<String, String>> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return null;
+        }
+        ArrayNode arr = objectMapper.createArrayNode();
+
+        StringBuilder textPart = new StringBuilder(text == null ? "" : text);
+
+        for (Map<String, String> att : attachments) {
+            if ("image".equals(att.getOrDefault("kind", ""))) continue;
+            String name = att.getOrDefault("name", "file");
+            String body = att.getOrDefault("data", "");
+            String lang = guessLang(name);
+            if (textPart.length() > 0) textPart.append("\n\n");
+            textPart.append("[文件: ").append(name).append("]\n");
+            textPart.append("```").append(lang).append("\n").append(body).append("\n```");
+        }
+
+        ObjectNode textNode = objectMapper.createObjectNode();
+        textNode.put("type", "text");
+        textNode.put("text", textPart.toString());
+        arr.add(textNode);
+
+        for (Map<String, String> att : attachments) {
+            if (!"image".equals(att.getOrDefault("kind", ""))) continue;
+            String mime = att.getOrDefault("mimeType", "image/png");
+            String b64 = att.getOrDefault("data", "");
+            ObjectNode imgNode = objectMapper.createObjectNode();
+            imgNode.put("type", "image_url");
+            ObjectNode imgUrl = imgNode.putObject("image_url");
+            imgUrl.put("url", "data:" + mime + ";base64," + b64);
+            arr.add(imgNode);
+        }
+
+        return arr;
+    }
+
+    private String guessLang(String name) {
+        String lower = name.toLowerCase();
+        if (lower.endsWith(".py")) return "python";
+        if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
+        if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
+        if (lower.endsWith(".java")) return "java";
+        if (lower.endsWith(".go")) return "go";
+        if (lower.endsWith(".rs")) return "rust";
+        if (lower.endsWith(".c") || lower.endsWith(".h")) return "c";
+        if (lower.endsWith(".cpp")) return "cpp";
+        if (lower.endsWith(".css")) return "css";
+        if (lower.endsWith(".html") || lower.endsWith(".xml")) return "html";
+        if (lower.endsWith(".json")) return "json";
+        if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "yaml";
+        if (lower.endsWith(".sh")) return "bash";
+        if (lower.endsWith(".sql")) return "sql";
+        if (lower.endsWith(".md")) return "markdown";
+        return "";
     }
 
     private String buildToolAvailabilityPrompt(List<String> toolDefs, boolean webSearch) {
