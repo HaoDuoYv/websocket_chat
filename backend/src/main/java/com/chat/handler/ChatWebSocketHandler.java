@@ -983,15 +983,39 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String content = (String) data.get("content");
         boolean webSearch = Boolean.TRUE.equals(data.get("webSearch"));
 
-        if (content == null || content.trim().isEmpty()) {
+        @SuppressWarnings("unchecked")
+        java.util.List<java.util.Map<String, String>> attachments = new java.util.ArrayList<>();
+        Object attachmentsObj = data.get("attachments");
+        if (attachmentsObj instanceof java.util.List<?> list) {
+            for (Object item : list) {
+                if (item instanceof java.util.Map<?, ?> m) {
+                    java.util.Map<String, String> att = new java.util.HashMap<>();
+                    Object kind = m.get("kind");
+                    Object name = m.get("name");
+                    Object mimeType = m.get("mimeType");
+                    Object dataField = m.get("data");
+                    if (kind == null || dataField == null) continue;
+                    att.put("kind", String.valueOf(kind));
+                    att.put("name", name != null ? String.valueOf(name) : "");
+                    att.put("mimeType", mimeType != null ? String.valueOf(mimeType) : "");
+                    att.put("data", String.valueOf(dataField));
+                    attachments.add(att);
+                }
+            }
+        }
+
+        if ((content == null || content.trim().isEmpty()) && attachments.isEmpty()) {
             sendToSession(session.getId(), new Event("ai:chat:error", Map.of("message", "消息不能为空")));
             return;
         }
+        if (content == null) content = "";
 
         try {
             if (conversationId == null) {
-                AiConversation conversation = aiConversationService.createConversation(userId, assistantId, 
-                    content.length() > 20 ? content.substring(0, 20) : content);
+                String title = !content.isBlank()
+                        ? (content.length() > 20 ? content.substring(0, 20) : content)
+                        : (!attachments.isEmpty() ? "[附件] " + attachments.get(0).getOrDefault("name", "") : "新对话");
+                AiConversation conversation = aiConversationService.createConversation(userId, assistantId, title);
                 conversationId = conversation.getId();
                 
                 sendToSession(session.getId(), new Event("ai:conversation:created", Map.of(
@@ -1006,7 +1030,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 "conversationId", String.valueOf(convId)
             )));
 
-            aiChatService.streamChat(assistantId, conversationId, content, webSearch,
+            aiChatService.streamChat(assistantId, conversationId, content, webSearch, attachments,
                 token -> {
                     try {
                         sendToSession(session.getId(), new Event("ai:chat:stream", Map.of(
