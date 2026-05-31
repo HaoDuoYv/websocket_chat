@@ -561,10 +561,22 @@ export function useWebSocket() {
   }
 
   // AI相关函数
-  const sendAiChat = (assistantId: string, content: string, conversationId?: string, webSearch?: boolean) => {
+  const sendAiChat = (
+    assistantId: string,
+    content: string,
+    conversationId?: string,
+    webSearch?: boolean,
+    attachments?: Array<{ kind: 'image' | 'text'; name: string; mimeType: string; data: string }>
+  ) => {
     const aiChatEvent: WebSocketEvent = {
       type: 'ai:chat',
-      data: { assistantId, content, conversationId, webSearch: webSearch || false }
+      data: {
+        assistantId,
+        content,
+        conversationId,
+        webSearch: webSearch || false,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined
+      }
     }
     sharedSocket?.send(JSON.stringify(aiChatEvent))
   }
