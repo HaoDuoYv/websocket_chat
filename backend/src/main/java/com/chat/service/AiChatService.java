@@ -75,13 +75,34 @@ public class AiChatService {
     }
 
     public AiMessage saveUserMessage(Long conversationId, String content) {
+        return saveUserMessage(conversationId, content, java.util.Collections.emptyList());
+    }
+
+    public AiMessage saveUserMessage(Long conversationId, String content, List<Map<String, String>> attachments) {
         AiMessage message = new AiMessage();
         message.setId(idGenerator.nextId());
         message.setConversationId(conversationId);
         message.setRole("user");
-        message.setContent(content);
+        message.setContent(buildStoredUserContent(content, attachments));
         message.setCreatedAt(System.currentTimeMillis());
         return aiMessageRepository.save(message);
+    }
+
+    private String buildStoredUserContent(String content, List<Map<String, String>> attachments) {
+        StringBuilder sb = new StringBuilder(content == null ? "" : content);
+        if (attachments != null) {
+            for (Map<String, String> att : attachments) {
+                String kind = att.getOrDefault("kind", "");
+                String name = att.getOrDefault("name", "");
+                if (sb.length() > 0) sb.append('\n');
+                if ("image".equals(kind)) {
+                    sb.append("[图片: ").append(name).append("]");
+                } else {
+                    sb.append("[文件: ").append(name).append("]");
+                }
+            }
+        }
+        return sb.toString();
     }
 
     public AiMessage saveAssistantMessage(Long conversationId, String content, Integer tokenCount) {
@@ -97,11 +118,12 @@ public class AiChatService {
 
     // 原始方法（无 tool calling）
     public void streamChat(Long assistantId, Long conversationId, String userContent, Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError) {
-        streamChat(assistantId, conversationId, userContent, false, onToken, onComplete, onError, null, null);
+        streamChat(assistantId, conversationId, userContent, false, java.util.Collections.emptyList(), onToken, onComplete, onError, null, null);
     }
 
     // 带 tool calling 的方法
     public void streamChat(Long assistantId, Long conversationId, String userContent, boolean webSearch,
+                           List<Map<String, String>> attachments,
                            Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
                            Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
         try {
@@ -112,7 +134,7 @@ public class AiChatService {
             }
             AiAssistant assistant = assistantOpt.get();
 
-            saveUserMessage(conversationId, userContent);
+            saveUserMessage(conversationId, userContent, attachments);
             aiConversationService.incrementMessageCount(conversationId);
 
             List<Message> messages = buildContext(assistant, conversationId);
@@ -143,9 +165,9 @@ public class AiChatService {
             }
 
             if (isGlm) {
-                toolCallingGlm(assistant, conversationId, messages, toolDefs, webSearch, onToken, onComplete, onError, onToolCall, onToolResult);
+                toolCallingGlm(assistant, conversationId, messages, toolDefs, webSearch, attachments, onToken, onComplete, onError, onToolCall, onToolResult);
             } else {
-                toolCallingOpenAi(assistant, conversationId, messages, chatUrl, toolDefs, onToken, onComplete, onError, onToolCall, onToolResult);
+                toolCallingOpenAi(assistant, conversationId, messages, chatUrl, toolDefs, attachments, onToken, onComplete, onError, onToolCall, onToolResult);
             }
 
         } catch (Exception e) {
@@ -157,6 +179,7 @@ public class AiChatService {
 
     private void toolCallingOpenAi(AiAssistant assistant, Long conversationId, List<Message> messages,
                                    String chatUrl, List<String> toolDefs,
+                                   List<Map<String, String>> attachments,
                                    Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
                                    Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
         try {
@@ -368,6 +391,7 @@ public class AiChatService {
 
     private void toolCallingGlm(AiAssistant assistant, Long conversationId, List<Message> messages,
                                 List<String> toolDefs, boolean webSearch,
+                                List<Map<String, String>> attachments,
                                 Consumer<String> onToken, Consumer<String> onComplete, Consumer<String> onError,
                                 Consumer<Map<String, String>> onToolCall, Consumer<Map<String, String>> onToolResult) {
         try {
