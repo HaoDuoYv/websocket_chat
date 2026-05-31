@@ -80,6 +80,27 @@ export const useChatStore = defineStore('chat', () => {
   const latestMention = ref<Record<string, any>>({})
   const roomMembers = ref<User[]>([])
   const streamingMessageIds = ref<Set<string>>(new Set())
+  const roomAssistants = ref<Record<string, any[]>>({})
+  const availableAssistants = ref<any[]>([])
+
+  function setRoomAssistants(roomId: string, assistants: any[]) {
+    roomAssistants.value = { ...roomAssistants.value, [roomId]: assistants }
+  }
+
+  function addRoomAssistant(roomId: string, assistant: any) {
+    const cur = roomAssistants.value[roomId] || []
+    if (cur.find((a: any) => String(a.id) === String(assistant.id))) return
+    setRoomAssistants(roomId, [...cur, assistant])
+  }
+
+  function removeRoomAssistant(roomId: string, assistantId: string) {
+    const cur = roomAssistants.value[roomId] || []
+    setRoomAssistants(roomId, cur.filter((a: any) => String(a.id) !== String(assistantId)))
+  }
+
+  function setAvailableAssistants(list: any[]) {
+    availableAssistants.value = list
+  }
 
   function startStreaming(messageId: string) {
     streamingMessageIds.value = new Set([...streamingMessageIds.value, messageId])
@@ -269,6 +290,12 @@ export const useChatStore = defineStore('chat', () => {
     latestMention,
     roomMembers,
     streamingMessageIds,
+    roomAssistants,
+    availableAssistants,
+    setRoomAssistants,
+    addRoomAssistant,
+    removeRoomAssistant,
+    setAvailableAssistants,
     startStreaming,
     appendDelta,
     completeStreaming,

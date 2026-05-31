@@ -235,6 +235,39 @@ export function useWebSocket() {
         break
       }
 
+      case 'room:assistant:added': {
+        const data = event.data as { roomId: string; assistant: any }
+        store.addRoomAssistant(data.roomId, data.assistant)
+        break
+      }
+
+      case 'room:assistant:removed': {
+        const data = event.data as { roomId: string; assistantId: string }
+        store.removeRoomAssistant(data.roomId, data.assistantId)
+        break
+      }
+
+      case 'room:assistant:list:result': {
+        const data = event.data as { roomId: string; assistants: any[] }
+        store.setRoomAssistants(data.roomId, data.assistants)
+        break
+      }
+
+      case 'room:assistant:available:result': {
+        const data = event.data as { assistants: any[] }
+        store.setAvailableAssistants(data.assistants)
+        break
+      }
+
+      case 'room:assistant:error': {
+        const data = event.data as { message?: string; roomId?: string; assistantId?: string }
+        const msg = data.message || '智能体操作失败'
+        try {
+          console.warn('[room:assistant:error]', msg)
+        } catch (e) {}
+        break
+      }
+
       case 'message:history:response': {
         const historyData = event.data as { roomId: string; messages: Message[] }
         const existingIds = new Set(messages.value.map(m => m.id))
@@ -490,6 +523,34 @@ export function useWebSocket() {
       data: { roomId, content }
     }
     sharedSocket?.send(JSON.stringify(messageEvent))
+  }
+
+  const addAssistantToRoom = (roomId: string, assistantId: string) => {
+    sharedSocket?.send(JSON.stringify({
+      type: 'room:assistant:add',
+      data: { roomId, assistantId }
+    }))
+  }
+
+  const removeAssistantFromRoom = (roomId: string, assistantId: string) => {
+    sharedSocket?.send(JSON.stringify({
+      type: 'room:assistant:remove',
+      data: { roomId, assistantId }
+    }))
+  }
+
+  const listRoomAssistants = (roomId: string) => {
+    sharedSocket?.send(JSON.stringify({
+      type: 'room:assistant:list',
+      data: { roomId }
+    }))
+  }
+
+  const listAvailableAssistants = () => {
+    sharedSocket?.send(JSON.stringify({
+      type: 'room:assistant:available',
+      data: {}
+    }))
   }
 
   const sendFileMessage = (roomId: string, _senderId: string, fileInfo: FileInfo) => {
@@ -753,6 +814,10 @@ export function useWebSocket() {
     loadRoomMembers,
     sendRoomAvatarUpdated,
     refreshRoomList,
+    addAssistantToRoom,
+    removeAssistantFromRoom,
+    listRoomAssistants,
+    listAvailableAssistants,
     userRenamedCounter: store.userRenamedCounter,
     userAvatarMap: store.userAvatarMap,
     cacheUserAvatar: store.cacheUserAvatar
