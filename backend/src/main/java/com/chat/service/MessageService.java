@@ -52,6 +52,16 @@ public class MessageService {
     }
 
     @Transactional
+    public Message sendMessage(Long roomId, Long senderId, String content, String type, String senderType) {
+        Message msg = sendMessage(roomId, senderId, content, type);
+        if (senderType != null && !senderType.equals(msg.getSenderType())) {
+            msg.setSenderType(senderType);
+            return messageRepository.save(msg);
+        }
+        return msg;
+    }
+
+    @Transactional
     public Message sendFileMessage(Long roomId, Long senderId, String content,
                                    String fileId, String fileName, String fileUrl,
                                    Long fileSize, String fileType) {
