@@ -20,10 +20,13 @@ public class ToolCallingService {
     @Autowired
     private WebFetchTool webFetchTool;
 
+    @Autowired
+    private WebSearchTool webSearchTool;
+
     public static final int MAX_TOOL_ROUNDS = 5;
 
     public List<String> getToolDefinitions() {
-        return List.of(WebFetchTool.getToolDefinition());
+        return List.of(WebSearchTool.getToolDefinition(), WebFetchTool.getToolDefinition());
     }
 
     public String executeTool(String toolName, String argsJson) {
@@ -31,6 +34,15 @@ public class ToolCallingService {
             log.info("执行工具 {}, args={}", toolName, argsJson);
             JsonNode args = objectMapper.readTree(argsJson);
             String result = switch (toolName) {
+                case "web_search" -> {
+                    String query = "";
+                    if (args.has("query")) {
+                        query = args.get("query").asText();
+                    } else if (args.isTextual()) {
+                        query = args.asText();
+                    }
+                    yield webSearchTool.execute(query);
+                }
                 case "web_fetch" -> {
                     String url = "";
                     if (args.has("url")) {
