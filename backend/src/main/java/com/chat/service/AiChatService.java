@@ -1133,6 +1133,7 @@ public class AiChatService {
      * 不写 ai_messages 表（群聊归宿是 messages 表）。
      */
     public void streamGroupChat(Long assistantId, Long roomId, String triggerContent,
+                                java.util.List<java.util.Map<String, String>> attachments,
                                 java.util.function.Consumer<String> onToken,
                                 java.util.function.Consumer<String> onComplete,
                                 java.util.function.Consumer<String> onError) {
@@ -1176,7 +1177,7 @@ public class AiChatService {
             boolean isGlm = baseUrl.contains("open.bigmodel.cn");
 
             java.util.List<String> toolDefs = java.util.Collections.emptyList();
-            java.util.List<java.util.Map<String, String>> attachments = java.util.Collections.emptyList();
+            if (attachments == null) attachments = java.util.Collections.emptyList();
 
             if (isGlm) {
                 toolCallingGlm(assistant, null, messages, toolDefs, false, attachments,

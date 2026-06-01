@@ -1251,9 +1251,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (isMentionAll) {
             return;
         }
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> attachments = (List<Map<String, String>>) data.get("attachments");
+        if (attachments == null) attachments = java.util.Collections.emptyList();
+
         List<AiAssistant> targetAssistants = mentionService.extractAssistantMentions(roomId, mentionedUserIds);
         for (AiAssistant assistant : targetAssistants) {
-            triggerAssistantReply(roomId, assistant, content, senderId, session);
+            triggerAssistantReply(roomId, assistant, content, senderId, session, attachments);
         }
     }
 
@@ -1382,7 +1386,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void triggerAssistantReply(Long roomId, AiAssistant assistant, String triggerContent,
-                                       Long triggerUserId, WebSocketSession triggerSession) {
+                                       Long triggerUserId, WebSocketSession triggerSession,
+                                       List<Map<String, String>> attachments) {
         long now = System.currentTimeMillis();
         var acquireResult = invocationManager.tryAcquire(roomId, assistant.getId(), now);
         if (acquireResult == GroupAssistantInvocationManager.AcquireResult.IN_FLIGHT) {
@@ -1425,7 +1430,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         StringBuilder buf = new StringBuilder();
         boolean submitted = groupAssistantExecutor.submit(() -> {
             try {
-                aiChatService.streamGroupChat(assistant.getId(), roomId, triggerContent,
+                aiChatService.streamGroupChat(assistant.getId(), roomId, triggerContent, attachments,
                         delta -> {
                             buf.append(delta);
                             try {

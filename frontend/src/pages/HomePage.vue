@@ -13,6 +13,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { useChatStore } from '@/stores/chat'
 import { useAiStore } from '@/stores/ai'
 import { formatFileSize, getFileIcon, isImageFile, uploadFile } from '@/api/file'
+import { buildPendingAttachment } from '@/utils/aiAttachment'
 import { uploadUserAvatar, uploadRoomAvatarTemp, confirmRoomAvatar, cancelAvatar } from '@/api/avatar'
 import { useToast } from '@/composables/useToast'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
@@ -1274,7 +1275,20 @@ const handleMentionSend = async (content: string, mentions: MentionUser[], menti
       ...(assistantMentions || []).map(a => a.userId)
     ]
     const mergedMentions = allMentionIds.map(id => ({ userId: id, username: '' }))
-    sendMentionMessage(selectedRoomId.value, content, mergedMentions, mentionAll)
+
+    // 当有智能体被@且有附件时，将附件转为 AI 格式一并发送
+    let aiAttachments: Array<{ kind: 'image' | 'text'; name: string; mimeType: string; data: string }> | undefined
+    if (assistantMentions && assistantMentions.length > 0 && pendingAttachments.value.length > 0) {
+      const converted: typeof aiAttachments = []
+      for (const att of pendingAttachments.value) {
+        const result = await buildPendingAttachment(att.file)
+        if ('error' in result) continue
+        converted.push({ kind: result.kind, name: result.name, mimeType: result.mimeType, data: result.data })
+      }
+      if (converted.length > 0) aiAttachments = converted
+    }
+
+    sendMentionMessage(selectedRoomId.value, content, mergedMentions, mentionAll, aiAttachments)
   } else {
     sendMessage(selectedRoomId.value, content, user.value.userId)
   }

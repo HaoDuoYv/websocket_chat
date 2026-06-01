@@ -727,16 +727,17 @@ export function useWebSocket() {
     }))
   }
 
-  const sendMentionMessage = (roomId: string, content: string, mentions: User[], mentionAll: boolean) => {
+  const sendMentionMessage = (roomId: string, content: string, mentions: User[], mentionAll: boolean, attachments?: Array<{ kind: 'image' | 'text'; name: string; mimeType: string; data: string }>) => {
     if (!sharedSocket || sharedSocket.readyState !== WebSocket.OPEN) return
-    
+
     const mentionEvent = {
       type: 'mention:send',
       data: {
         roomId,
         content,
         mentions: mentions.map(m => ({ userId: m.userId, username: m.username })),
-        mentionAll
+        mentionAll,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined
       }
     }
     sharedSocket.send(JSON.stringify(mentionEvent))
