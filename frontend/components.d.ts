@@ -12,7 +12,11 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AdminAiConfig: typeof import('./src/components/AdminAiConfig.vue')['default']
+    AiAttachmentChip: typeof import('./src/components/AiAttachmentChip.vue')['default']
+    AiAttachmentPreview: typeof import('./src/components/AiAttachmentPreview.vue')['default']
     AppDetailModal: typeof import('./src/components/AppDetailModal.vue')['default']
+    AssistantBadge: typeof import('./src/components/AssistantBadge.vue')['default']
+    AssistantPicker: typeof import('./src/components/AssistantPicker.vue')['default']
     AvatarUpload: typeof import('./src/components/AvatarUpload.vue')['default']
     ChatSidebar: typeof import('./src/components/ChatSidebar.vue')['default']
     CodeBlock: typeof import('./src/components/CodeBlock.vue')['default']

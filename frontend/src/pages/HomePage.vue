@@ -20,6 +20,7 @@ import { getUserRemarks, saveUserRemark } from '@/api/userRemark'
 import { emojiCategories } from '@/config/emojis'
 import MentionInput from '@/components/MentionInput.vue'
 import MentionNotification from '@/components/MentionNotification.vue'
+import AssistantPicker from '@/components/AssistantPicker.vue'
 
 const toast = useToast()
 
@@ -91,6 +92,10 @@ const {
   latestMention,
   markMentionsAsRead,
   loadUnreadMentions,
+  addAssistantToRoom,
+  removeAssistantFromRoom,
+  listRoomAssistants,
+  listAvailableAssistants,
 } = useWebSocket()
 
 const systemAssistant = computed(() => aiStore.systemAssistant)
@@ -137,6 +142,26 @@ const browserNotificationEnabled = ref(false)
 const notificationAudio = typeof Audio !== 'undefined' ? new Audio('/notification.mp3') : null
 const floatingNotices = ref<FloatingNotice[]>([])
 const unreadPageCount = computed(() => rooms.value.reduce((total, room) => total + getUnreadCount(room.id), 0))
+
+// 智能体管理
+const showAssistantPicker = ref(false)
+
+function openAssistantPicker() {
+  listAvailableAssistants()
+  showAssistantPicker.value = true
+}
+
+function onPickAssistant(a: any) {
+  if (!selectedRoomId.value) return
+  addAssistantToRoom(selectedRoomId.value, String(a.id))
+  showAssistantPicker.value = false
+}
+
+function onRemoveAssistant(assistantId: string) {
+  if (!selectedRoomId.value) return
+  if (!confirm('从群里移除该智能体？')) return
+  removeAssistantFromRoom(selectedRoomId.value, assistantId)
+}
 
 const isProfileDialogOpen = ref(false)
 const avatarUploadRef = ref<InstanceType<typeof AvatarUpload> | null>(null)
@@ -623,6 +648,7 @@ watch(selectedRoomId, (newId, oldId) => {
     scrollToBottom()
     if (currentRoom.value?.type === 'public') {
       loadRoomMembers(newId)
+      listRoomAssistants(newId)
     } else {
       roomMembers.value = []
       showSidebar.value = false
@@ -1240,10 +1266,15 @@ const handleSendMessage = async () => {
 
 interface MentionUser { userId: string; username: string }
 
-const handleMentionSend = async (content: string, mentions: MentionUser[], mentionAll: boolean) => {
+const handleMentionSend = async (content: string, mentions: MentionUser[], mentionAll: boolean, assistantMentions?: any[]) => {
   if (!user.value || !selectedRoomId.value) return
-  if (mentions.length > 0 || mentionAll) {
-    sendMentionMessage(selectedRoomId.value, content, mentions, mentionAll)
+  if (mentions.length > 0 || mentionAll || (assistantMentions && assistantMentions.length > 0)) {
+    const allMentionIds = [
+      ...mentions.map(m => m.userId),
+      ...(assistantMentions || []).map(a => a.userId)
+    ]
+    const mergedMentions = allMentionIds.map(id => ({ userId: id, username: '' }))
+    sendMentionMessage(selectedRoomId.value, content, mergedMentions, mentionAll)
   } else {
     sendMessage(selectedRoomId.value, content, user.value.userId)
   }
@@ -2125,6 +2156,13 @@ const isRoomReadByOthers = (roomId: string): boolean => {
                 ref="mentionInputRef"
                 v-model="newMessage"
                 :users="roomMembers"
+                :assistants="(chatStore.roomAssistants[selectedRoomId ?? ''] ?? []).map((a: any) => ({
+                  userId: String(a.id),
+                  username: a.name,
+                  isAssistant: true,
+                  avatarIcon: a.avatarIcon,
+                  avatarColor: a.avatarColor
+                }))"
                 :is-dark="isDarkTheme"
                 :disabled="isSendingFiles"
                 :current-user-id="user?.userId"
@@ -2216,8 +2254,48 @@ const isRoomReadByOthers = (roomId: string): boolean => {
               <p v-if="member.userId === currentRoom?.ownerId" class="text-xs text-amber-500">群主</p>
             </div>
           </div>
+
+          <!-- 智能体分组 -->
+          <div class="flex items-center justify-between px-4 py-2 mt-2 border-t" :class="isDarkTheme ? 'border-gray-700' : 'border-gray-100'">
+            <span class="text-xs font-medium" :class="isDarkTheme ? 'text-gray-400' : 'text-gray-500'">智能体</span>
+            <button
+              class="text-xs px-2 py-0.5 rounded"
+              :class="isDarkTheme ? 'bg-purple-900/40 text-purple-300 hover:bg-purple-900/60' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'"
+              @click="openAssistantPicker"
+            >+ 添加</button>
+          </div>
+          <div v-if="(chatStore.roomAssistants[selectedRoomId ?? ''] ?? []).length === 0" class="px-4 py-2 text-xs" :class="isDarkTheme ? 'text-gray-500' : 'text-gray-400'">
+            暂无智能体
+          </div>
+          <div
+            v-for="a in (chatStore.roomAssistants[selectedRoomId ?? ''] ?? [])"
+            :key="a.id"
+            class="flex items-center gap-2 px-4 py-2"
+          >
+            <div
+              class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs shrink-0"
+              :style="{ backgroundColor: a.avatarColor || '#7c3aed' }"
+            >{{ (a.avatarIcon || a.name || 'A').slice(0, 1) }}</div>
+            <span class="flex-1 text-sm truncate" :class="isDarkTheme ? 'text-gray-200' : 'text-gray-800'">{{ a.name }}</span>
+            <span class="text-[10px] px-1 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 flex-shrink-0">AI</span>
+            <button
+              v-if="String(currentRoom?.ownerId) === String(user?.userId)"
+              class="text-xs flex-shrink-0"
+              :class="isDarkTheme ? 'text-red-400 hover:text-red-300' : 'text-red-500 hover:text-red-600'"
+              @click="onRemoveAssistant(a.id)"
+            >移除</button>
+          </div>
         </div>
       </div>
+      <AssistantPicker
+        :open="showAssistantPicker"
+        :available="chatStore.availableAssistants"
+        :already-in-room-ids="(chatStore.roomAssistants[selectedRoomId ?? ''] ?? []).map((a: any) => String(a.id))"
+        :is-dark="isDarkTheme"
+        :current-user-id="user?.userId"
+        @close="showAssistantPicker = false"
+        @select="onPickAssistant"
+      />
     </div>
   </div>
   

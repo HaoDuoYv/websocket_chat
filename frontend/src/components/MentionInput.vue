@@ -6,17 +6,26 @@ interface User {
   username: string
 }
 
+interface AssistantOption {
+  userId: string         // 复用 userId 字段，存 assistantId
+  username: string       // 智能体名
+  isAssistant: true
+  avatarIcon?: string
+  avatarColor?: string
+}
+
 const props = defineProps<{
   modelValue: string
   users: User[]
   isDark: boolean
   disabled: boolean
   currentUserId?: string
+  assistants?: AssistantOption[]
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
-  send: [content: string, mentions: User[], mentionAll: boolean]
+  send: [content: string, mentions: User[], mentionAll: boolean, assistants: AssistantOption[]]
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -25,6 +34,7 @@ const showDropdown = ref(false)
 const mentionQuery = ref('')
 const selectedIndex = ref(0)
 const mentionedUsers = ref<User[]>([])
+const mentionedAssistants = ref<AssistantOption[]>([])
 const mentionAll = ref(false)
 const mentionStart = ref(-1)
 
@@ -42,9 +52,17 @@ const filtered = computed(() => {
   return list
 })
 
-// 所有可选项：@所有人 放在最前面
+// 所有可选项：@所有人 放在最前面，其次是智能体，最后是用户
 const options = computed(() => {
-  return [{ userId: '__all__', username: '所有人' } as User, ...filtered.value]
+  const q = mentionQuery.value.toLowerCase()
+  const assistantList = (props.assistants ?? []).filter(a =>
+    !q || a.username.toLowerCase().includes(q)
+  )
+  return [
+    { userId: '__all__', username: '所有人' } as User,
+    ...assistantList,
+    ...filtered.value
+  ] as Array<User | AssistantOption>
 })
 
 // 更新下拉位置（相对于输入框上方）
@@ -85,22 +103,27 @@ const close = () => {
 }
 
 // 选择一个选项
-const pick = (opt: User) => {
+const pick = (opt: User | AssistantOption) => {
   const el = inputRef.value
   if (!el) return
   const val = el.value
   const before = val.slice(0, mentionStart.value)
   const after = val.slice(el.selectionStart ?? val.length)
   const isAll = opt.userId === '__all__'
+  const isAssistant = (opt as AssistantOption).isAssistant === true
   const name = isAll ? '所有人' : opt.username
   const insert = `@${name} `
 
   inputValue.value = before + insert + after
   if (isAll) {
     mentionAll.value = true
+  } else if (isAssistant) {
+    if (!mentionedAssistants.value.find(a => a.userId === opt.userId)) {
+      mentionedAssistants.value.push(opt as AssistantOption)
+    }
   } else {
     if (!mentionedUsers.value.find(u => u.userId === opt.userId)) {
-      mentionedUsers.value.push(opt)
+      mentionedUsers.value.push(opt as User)
     }
   }
   close()
@@ -152,9 +175,10 @@ const scrollToSelected = () => {
 const doSend = () => {
   const content = inputValue.value.trim()
   if (!content) return
-  emit('send', content, mentionedUsers.value, mentionAll.value)
+  emit('send', content, mentionedUsers.value, mentionAll.value, mentionedAssistants.value)
   inputValue.value = ''
   mentionedUsers.value = []
+  mentionedAssistants.value = []
   mentionAll.value = false
 }
 
@@ -172,6 +196,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocMouseDown))
 
 const clearMentions = () => {
   mentionedUsers.value = []
+  mentionedAssistants.value = []
   mentionAll.value = false
 }
 
@@ -216,8 +241,13 @@ defineExpose({ clearMentions, triggerSend: doSend })
           ]"
           @mousedown.prevent="pick(opt)"
         >
-          <span class="mention-icon">{{ opt.userId === '__all__' ? '👥' : '👤' }}</span>
+          <span v-if="opt.userId === '__all__'" class="mention-icon">👥</span>
+          <span v-else-if="(opt as AssistantOption).isAssistant" class="mention-icon" :style="(opt as AssistantOption).avatarIcon ? { background: (opt as AssistantOption).avatarColor, borderRadius: '50%', width: '1.25rem', height: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', color: '#fff', flexShrink: 0 } : {}">
+            {{ (opt as AssistantOption).avatarIcon || '🤖' }}
+          </span>
+          <span v-else class="mention-icon">👤</span>
           <span>{{ opt.userId === '__all__' ? '@所有人' : `@${opt.username}` }}</span>
+          <span v-if="(opt as AssistantOption).isAssistant" class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 flex-shrink-0">AI</span>
         </div>
       </div>
     </Teleport>

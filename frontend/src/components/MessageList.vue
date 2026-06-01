@@ -4,6 +4,10 @@ import FileMessage from '@/components/FileMessage.vue'
 import CodeBlock from '@/components/CodeBlock.vue'
 import { isImageFile } from '@/api/file'
 import AiAttachmentPreview from '@/components/AiAttachmentPreview.vue'
+import AssistantBadge from '@/components/AssistantBadge.vue'
+import { useChatStore } from '@/stores/chat'
+
+const chatStore = useChatStore()
 
 interface Message {
   id: string
@@ -16,6 +20,7 @@ interface Message {
   createdAt?: number
   seq?: number
   type?: 'text' | 'file' | 'system'
+  senderType?: 'user' | 'assistant'
   fileId?: string
   fileName?: string
   fileUrl?: string
@@ -347,8 +352,9 @@ defineExpose({ scrollToBottom, scrollToMessage })
           </div>
 
           <div :class="['flex flex-col max-w-[65%]', isAiMode || String(message.senderId || '') === currentUserId ? 'items-end' : 'items-start']">
-            <div v-if="!isAiMode && String(message.senderId || '') !== currentUserId" class="text-xs mb-1 ml-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
+            <div v-if="!isAiMode && String(message.senderId || '') !== currentUserId" class="text-xs mb-1 ml-1 flex items-center gap-1" :class="isDark ? 'text-gray-400' : 'text-gray-500'">
               {{ message.senderName || '' }}
+              <AssistantBadge v-if="message.senderType === 'assistant'" :is-dark="isDark" />
             </div>
 
             <AiAttachmentPreview
@@ -361,9 +367,11 @@ defineExpose({ scrollToBottom, scrollToMessage })
               :class="[
                 'transition-all duration-200',
                 isImageMessage(message) ? 'px-1 py-1 rounded-2xl' : 'px-4 py-3 text-sm rounded-2xl',
-                isAiMode || String(message.senderId || '') === currentUserId
-                  ? 'bg-[#18181B] text-white shadow-md rounded-br-md'
-                  : (isDark ? 'bg-gray-800 text-gray-100 shadow-sm rounded-bl-md' : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md')
+                message.senderType === 'assistant' && typeof message.content === 'string' && message.content.startsWith('[智能体回复失败:')
+                  ? (isDark ? 'bg-orange-900/30 text-orange-200' : 'bg-orange-100 text-orange-800')
+                  : (isAiMode || String(message.senderId || '') === currentUserId
+                    ? 'bg-[#18181B] text-white shadow-md rounded-br-md'
+                    : (isDark ? 'bg-gray-800 text-gray-100 shadow-sm rounded-bl-md' : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md'))
               ]"
             >
               <div v-if="message.type === 'file' && message.fileId" class="min-w-[200px]">
@@ -379,13 +387,18 @@ defineExpose({ scrollToBottom, scrollToMessage })
               <div v-else class="leading-relaxed">
                 <template v-for="(part, index) in parseMentionContent(message.content, [])" :key="index">
                   <span v-if="part.type === 'text'">{{ part.content }}</span>
-                  <span 
-                    v-else 
+                  <span
+                    v-else
                     :class="[
                       part.userId === currentUserId ? 'mention-self' : 'mention-highlight'
                     ]"
                   >{{ part.content }}</span>
                 </template>
+                <span
+                  v-if="message.senderType === 'assistant' && chatStore.streamingMessageIds.has(String(message.id))"
+                  class="inline-block w-[2px] h-[1em] align-middle ml-0.5 animate-pulse"
+                  :class="isDark ? 'bg-gray-300' : 'bg-gray-700'"
+                ></span>
               </div>
             </div>
           </div>
