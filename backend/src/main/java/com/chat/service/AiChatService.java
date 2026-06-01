@@ -60,6 +60,9 @@ public class AiChatService {
     private ToolCallingService toolCallingService;
 
     @Autowired
+    private WebSearchTool webSearchTool;
+
+    @Autowired
     private SnowflakeIdGenerator idGenerator;
 
     private static final int SUMMARY_THRESHOLD = 20;
@@ -494,11 +497,11 @@ public class AiChatService {
 
             // 使用 GLM 内置 WebSearchToolSchema
             ArrayNode toolsArray = requestBody.putArray("tools");
-            ObjectNode webSearchTool = objectMapper.createObjectNode();
-            webSearchTool.put("type", "web_search");
-            ObjectNode webSearchConfig = webSearchTool.putObject("web_search");
+            ObjectNode webSearchToolSchema = objectMapper.createObjectNode();
+            webSearchToolSchema.put("type", "web_search");
+            ObjectNode webSearchConfig = webSearchToolSchema.putObject("web_search");
             webSearchConfig.put("enable", true);
-            toolsArray.add(webSearchTool);
+            toolsArray.add(webSearchToolSchema);
 
             String bodyJson = objectMapper.writeValueAsString(requestBody);
             log.info("GLM请求(带web_search): {}", bodyJson);
@@ -576,6 +579,34 @@ public class AiChatService {
                             "toolName", "web_search",
                             "result", summary.length() > 500 ? summary.substring(0, 500) + "..." : summary
                     ));
+                }
+
+                // Fallback: 如果智谱 web_search 无结果，尝试 DuckDuckGo
+                if (searchSummary.length() == 0) {
+                    String ddgQuery = "";
+                    for (int i = glmMessages.size() - 1; i >= 0; i--) {
+                        if ("user".equals(glmMessages.get(i).get("role").asText())) {
+                            ddgQuery = glmMessages.get(i).get("content").asText();
+                            break;
+                        }
+                    }
+                    String ddgResult = webSearchTool.execute(ddgQuery);
+                    if (!ddgResult.startsWith("搜索失败") && !ddgResult.startsWith("未找到")) {
+                        searchSummary.append(ddgResult);
+                        if (onToolCall != null) {
+                            onToolCall.accept(Map.of(
+                                    "callId", "ddg_search_" + System.currentTimeMillis(),
+                                    "toolName", "web_search",
+                                    "args", "{\"engine\":\"duckduckgo\"}"
+                            ));
+                        }
+                        if (onToolResult != null) {
+                            onToolResult.accept(Map.of(
+                                    "callId", "ddg_search_" + System.currentTimeMillis(),
+                                    "result", ddgResult.length() > 500 ? ddgResult.substring(0, 500) + "..." : ddgResult
+                            ));
+                        }
+                    }
                 }
 
                 // 将搜索结果注入上下文，重新调用 LLM 生成最终回复
@@ -1108,12 +1139,13 @@ public class AiChatService {
         }
         sb.append("\n## 行为规则\n");
         if (webSearch && hasWebTool) {
-            sb.append("1. 【联网搜索已开启】你必须在回复前调用 web_search 或 web_fetch 工具获取最新信息。绝对不能说你无法访问网络或基于训练数据直接回答需要实时信息的问题。\n");
-            sb.append("2. 对于任何涉及时事、天气、新闻、股价、赛事、价格等需要实时数据的问题，必须先搜索再回答。\n");
-            sb.append("3. 调用工具后，基于获取到的内容自然地回答用户，就像你本来就知道这些信息一样。\n");
-            sb.append("4. 绝对不要在回复中展示工具调用的过程、参数、JSON、函数名等技术细节。用户不需要知道你调用了什么工具。\n");
-            sb.append("5. 不要输出类似 web_fetch、{\"url\":...}、function_call 之类的内容。\n");
-            sb.append("6. 用自然、亲切、简洁的语气交流，像一个聪明的朋友在帮忙，不要用机械的口吻。\n");
+            sb.append("1. 【联网搜索已开启】你必须在回复前调用 web_search 工具获取最新信息。绝对不能说你无法访问网络或基于训练数据直接回答需要实时信息的问题。\n");
+            sb.append("2. 对于任何涉及时事、天气、新闻、股价、赛事、价格等需要实时数据的问题，必须先用 web_search 搜索再回答。\n");
+            sb.append("3. 只有当用户明确给出了一个 URL 链接时，才使用 web_fetch 抓取该网页内容。\n");
+            sb.append("4. 调用工具后，基于获取到的内容自然地回答用户，就像你本来就知道这些信息一样。\n");
+            sb.append("5. 绝对不要在回复中展示工具调用的过程、参数、JSON、函数名等技术细节。用户不需要知道你调用了什么工具。\n");
+            sb.append("6. 不要输出类似 web_fetch、web_search、{\"url\":...}、function_call 之类的内容。\n");
+            sb.append("7. 用自然、亲切、简洁的语气交流，像一个聪明的朋友在帮忙，不要用机械的口吻。\n");
         } else {
             sb.append("1. 当用户的消息中包含URL链接、或需要查询实时网络信息时，直接调用工具获取内容，不要说你无法访问网络。\n");
             sb.append("2. 调用工具后，基于获取到的内容自然地回答用户，就像你本来就知道这些信息一样。\n");
@@ -1176,11 +1208,11 @@ public class AiChatService {
             }
             boolean isGlm = baseUrl.contains("open.bigmodel.cn");
 
-            java.util.List<String> toolDefs = java.util.Collections.emptyList();
+            java.util.List<String> toolDefs = toolCallingService.getToolDefinitions();
             if (attachments == null) attachments = java.util.Collections.emptyList();
 
             if (isGlm) {
-                toolCallingGlm(assistant, null, messages, toolDefs, false, attachments,
+                toolCallingGlm(assistant, null, messages, toolDefs, true, attachments,
                         onToken, onComplete, onError, m -> {}, m -> {});
             } else {
                 toolCallingOpenAi(assistant, null, messages, chatUrl, toolDefs, attachments,
