@@ -76,7 +76,7 @@ export function createWindow(): BrowserWindow {
 }
 
 export function createTray(): void {
-  const icon = nativeImage.createEmpty()
+  const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHklEQVQ4T2P8z8BQz0BFAMIAQgP+M1LRgP8MEDAAE30A/bsCAAAAAElFTkSuQmCC')
   tray = new Tray(icon)
 
   const contextMenu = Menu.buildFromTemplate([
