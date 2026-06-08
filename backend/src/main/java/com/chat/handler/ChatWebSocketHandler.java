@@ -922,7 +922,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    // 获取在线用户列表（用于 AdminController）
+    // 获取在线用户列表
     public List<Map<String, Object>> getOnlineUsers() {
         return userSessionMap.keySet().stream()
                 .map(userId -> userService.findById(userId).orElse(null))

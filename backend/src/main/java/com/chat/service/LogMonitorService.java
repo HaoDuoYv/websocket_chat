@@ -1,6 +1,5 @@
 package com.chat.service;
 
-import com.chat.config.AdminConfig;
 import com.chat.vo.LogLineVO;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,8 +19,7 @@ import java.util.regex.Pattern;
 @Service
 public class LogMonitorService {
 
-    @Autowired
-    private AdminConfig adminConfig;
+    private static final String LOG_PATH = "logs";
 
     private final List<LogLineVO> recentLogs = new CopyOnWriteArrayList<>();
     private static final int MAX_LOG_LINES = 1000;
@@ -37,7 +35,7 @@ public class LogMonitorService {
     public void init() {
         try {
             // 初始化日志目录
-            String logPath = adminConfig.getLogPath();
+            String logPath = LOG_PATH;
             logDirPath = Paths.get(logPath);
             if (!Files.exists(logDirPath)) {
                 Files.createDirectories(logDirPath);

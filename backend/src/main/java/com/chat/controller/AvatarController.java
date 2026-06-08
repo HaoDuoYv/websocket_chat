@@ -4,7 +4,6 @@ import com.chat.entity.AiAssistant;
 import com.chat.entity.Room;
 import com.chat.repository.AiAssistantRepository;
 import com.chat.repository.RoomRepository;
-import com.chat.service.AdminAuthService;
 import com.chat.service.AvatarService;
 import com.chat.handler.ChatWebSocketHandler;
 import com.chat.utils.JwtUtil;
@@ -34,9 +33,6 @@ public class AvatarController {
     private AiAssistantRepository aiAssistantRepository;
 
     @Autowired
-    private AdminAuthService adminAuthService;
-
-    @Autowired
     private RoomRepository roomRepository;
 
     @Autowired
@@ -44,19 +40,6 @@ public class AvatarController {
 
     @Autowired
     private ChatWebSocketHandler chatWebSocketHandler;
-
-    private ResponseEntity<Map<String, Object>> checkSystemAssistantPermission(Long assistantId, HttpSession session) {
-        Optional<AiAssistant> opt = aiAssistantRepository.findById(assistantId);
-        if (opt.isPresent() && Boolean.TRUE.equals(opt.get().getIsSystem())) {
-            if (!adminAuthService.isLoggedIn(session)) {
-                return ResponseEntity.status(403).body(Map.of(
-                        "success", false,
-                        "message", "系统助手头像只有管理员可以修改"
-                ));
-            }
-        }
-        return null;
-    }
 
     private ResponseEntity<Map<String, Object>> checkRoomOwnerPermission(Long roomId, HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
@@ -218,8 +201,6 @@ public class AvatarController {
             @PathVariable Long assistantId,
             @RequestParam("file") MultipartFile file,
             HttpSession session) {
-        ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
-        if (permCheck != null) return permCheck;
         try {
             String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
             return ResponseEntity.ok(Map.of(
@@ -244,8 +225,6 @@ public class AvatarController {
             @PathVariable Long assistantId,
             @RequestBody Map<String, String> request,
             HttpSession session) {
-        ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
-        if (permCheck != null) return permCheck;
         try {
             String tempPath = request.get("tempPath");
             if (tempPath == null || tempPath.isBlank()) {
@@ -297,8 +276,6 @@ public class AvatarController {
             @PathVariable Long assistantId,
             @RequestParam("file") MultipartFile file,
             HttpSession session) {
-        ResponseEntity<Map<String, Object>> permCheck = checkSystemAssistantPermission(assistantId, session);
-        if (permCheck != null) return permCheck;
         try {
             String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
             String url = avatarService.confirmAiAvatar(assistantId, tempPath);
