@@ -1,8 +1,6 @@
 package com.chat.controller;
 
-import com.chat.entity.AiAssistant;
 import com.chat.entity.Room;
-import com.chat.repository.AiAssistantRepository;
 import com.chat.repository.RoomRepository;
 import com.chat.service.AvatarService;
 import com.chat.handler.ChatWebSocketHandler;
@@ -16,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import java.util.Map;
 import java.util.Optional;
 
@@ -28,9 +25,6 @@ public class AvatarController {
 
     @Autowired
     private AvatarService avatarService;
-
-    @Autowired
-    private AiAssistantRepository aiAssistantRepository;
 
     @Autowired
     private RoomRepository roomRepository;
@@ -199,8 +193,7 @@ public class AvatarController {
     @PostMapping("/ai/{assistantId}/temp")
     public ResponseEntity<Map<String, Object>> uploadAiAvatarTemp(
             @PathVariable Long assistantId,
-            @RequestParam("file") MultipartFile file,
-            HttpSession session) {
+            @RequestParam("file") MultipartFile file) {
         try {
             String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
             return ResponseEntity.ok(Map.of(
@@ -223,8 +216,7 @@ public class AvatarController {
     @PostMapping("/ai/{assistantId}/confirm")
     public ResponseEntity<Map<String, Object>> confirmAiAvatar(
             @PathVariable Long assistantId,
-            @RequestBody Map<String, String> request,
-            HttpSession session) {
+            @RequestBody Map<String, String> request) {
         try {
             String tempPath = request.get("tempPath");
             if (tempPath == null || tempPath.isBlank()) {
@@ -274,8 +266,7 @@ public class AvatarController {
     @PostMapping("/ai/{assistantId}")
     public ResponseEntity<Map<String, Object>> uploadAiAvatarLegacy(
             @PathVariable Long assistantId,
-            @RequestParam("file") MultipartFile file,
-            HttpSession session) {
+            @RequestParam("file") MultipartFile file) {
         try {
             String tempPath = avatarService.uploadAiAvatarTemp(assistantId, file);
             String url = avatarService.confirmAiAvatar(assistantId, tempPath);

@@ -948,49 +948,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    public void banOnlineUser(Long userId, String reason) {
-        String sessionId = userSessionMap.get(userId);
-        if (sessionId == null) {
-            return;
-        }
-
-        sendToSession(sessionId, new Event("user:banned", Map.of(
-                "reason", reason == null ? "" : reason
-        )));
-
-        WebSocketSession session = sessions.get(sessionId);
-        if (session != null && session.isOpen()) {
-            try {
-                session.close(CloseStatus.POLICY_VIOLATION);
-            } catch (IOException e) {
-                logger.error("关闭被封禁用户连接失败: {}", e.getMessage());
-            }
-        }
-    }
-
-    public void notifyUserRenamed(Long userId, String newUsername) {
-        // 通知被改名用户（更新本地状态）
-        String sessionId = userSessionMap.get(userId);
-        if (sessionId != null) {
-            sendToSession(sessionId, new Event("user:renamed", Map.of(
-                    "userId", String.valueOf(userId),
-                    "username", newUsername,
-                    "self", true
-            )));
-        }
-
-        // 广播给所有在线用户（更新消息列表、联系人、群成员等）
-        try {
-            broadcastToAll(new Event("user:renamed", Map.of(
-                    "userId", String.valueOf(userId),
-                    "username", newUsername,
-                    "self", false
-            )));
-        } catch (IOException e) {
-            logger.error("广播用户名修改失败: {}", e.getMessage());
-        }
-    }
-
     // AI相关事件处理
     private void handleAiChat(WebSocketSession session, Map<String, Object> data) {
         Long userId = sessionUserMap.get(session.getId());
