@@ -1,6 +1,5 @@
 import axios from 'axios'
-
-const API_BASE_URL = '/api/user-remarks'
+import { getApiUrl } from './server-config'
 
 export interface UserRemarkMapResponse {
   remarks: Record<string, string>
@@ -21,13 +20,13 @@ export interface SaveUserRemarkResponse {
 }
 
 export const getUserRemarks = async (userId: string) => {
-  const response = await axios.get<UserRemarkMapResponse>(API_BASE_URL, {
+  const response = await axios.get<UserRemarkMapResponse>(getApiUrl('/api/user-remarks'), {
     params: { userId }
   })
   return response.data
 }
 
 export const saveUserRemark = async (payload: SaveUserRemarkPayload) => {
-  const response = await axios.post<SaveUserRemarkResponse>(API_BASE_URL, payload)
+  const response = await axios.post<SaveUserRemarkResponse>(getApiUrl('/api/user-remarks'), payload)
   return response.data
 }

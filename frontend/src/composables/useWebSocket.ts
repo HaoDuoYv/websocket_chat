@@ -1,6 +1,7 @@
 import { storeToRefs } from 'pinia'
 import { useChatStore } from '@/stores/chat'
 import { useAiStore } from '@/stores/ai'
+import { getWsUrl } from '@/api/server-config'
 import type { Message, User, FileInfo, Room } from '@/stores/chat'
 import type { AiConversation, AiMessage } from '@/stores/ai'
 
@@ -82,7 +83,8 @@ export function useWebSocket() {
       reconnectTimer = null
     }
 
-    const wsUrl = currentToken ? `/ws/chat?token=${encodeURIComponent(currentToken)}` : '/ws/chat'
+    const wsPath = currentToken ? `/ws/chat?token=${encodeURIComponent(currentToken)}` : '/ws/chat'
+    const wsUrl = getWsUrl(wsPath)
     sharedSocket = new WebSocket(wsUrl)
 
     sharedSocket.onopen = () => {
