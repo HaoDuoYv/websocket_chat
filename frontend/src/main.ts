@@ -5,6 +5,7 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
+import { getServerBaseUrl } from './api/server-config'
 
 // JWT 请求拦截器
 axios.interceptors.request.use((config) => {
@@ -44,6 +45,12 @@ axios.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 动态配置 axios base URL（桌面端指向目标服务器）
+const serverBase = getServerBaseUrl()
+if (serverBase) {
+  axios.defaults.baseURL = serverBase
+}
 
 const app = createApp(App)
 const pinia = createPinia()

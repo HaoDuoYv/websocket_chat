@@ -1,6 +1,5 @@
 import axios from 'axios'
-
-const API_BASE_URL = '/api'
+import { getApiUrl } from './server-config'
 
 export interface FileUploadResponse {
   success: boolean
@@ -25,7 +24,7 @@ export const uploadFile = async (
 
   try {
     const response = await axios.post<FileUploadResponse>(
-      `${API_BASE_URL}/file/upload`,
+      getApiUrl('/api/file/upload'),
       formData,
       {
         headers: {
@@ -49,7 +48,7 @@ export const uploadFile = async (
 }
 
 export const getFileInfo = async (fileId: string): Promise<FileUploadResponse> => {
-  const response = await axios.get<FileUploadResponse>(`${API_BASE_URL}/file/info/${fileId}`)
+  const response = await axios.get<FileUploadResponse>(getApiUrl(`/api/file/info/${fileId}`))
   return response.data
 }
 

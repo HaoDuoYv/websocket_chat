@@ -1,6 +1,5 @@
 import axios from 'axios'
-
-const API_BASE_URL = '/api'
+import { getApiUrl } from './server-config'
 
 export interface AvatarUploadResponse {
   success: boolean
@@ -19,7 +18,7 @@ export const uploadUserAvatar = async (
   formData.append('file', file)
   try {
     const response = await axios.post<AvatarUploadResponse>(
-      `${API_BASE_URL}/avatar/user/${userId}`,
+      getApiUrl(`/api/avatar/user/${userId}`),
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -47,7 +46,7 @@ export const uploadUserAvatarTemp = async (
   formData.append('file', file)
   try {
     const response = await axios.post<AvatarUploadResponse>(
-      `${API_BASE_URL}/avatar/user/${userId}/temp`,
+      getApiUrl(`/api/avatar/user/${userId}/temp`),
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -71,7 +70,7 @@ export const confirmUserAvatar = async (
   tempPath: string
 ): Promise<AvatarUploadResponse> => {
   const response = await axios.post<AvatarUploadResponse>(
-    `${API_BASE_URL}/avatar/user/${userId}/confirm`,
+    getApiUrl(`/api/avatar/user/${userId}/confirm`),
     { tempPath }
   )
   return response.data
@@ -79,7 +78,7 @@ export const confirmUserAvatar = async (
 
 /** 取消头像上传 */
 export const cancelAvatar = async (tempPath: string): Promise<void> => {
-  await axios.post(`${API_BASE_URL}/avatar/cancel`, { tempPath })
+  await axios.post(getApiUrl('/api/avatar/cancel'), { tempPath })
 }
 
 /** 第一阶段：群聊头像上传到临时目录 */
@@ -92,7 +91,7 @@ export const uploadRoomAvatarTemp = async (
   formData.append('file', file)
   try {
     const response = await axios.post<AvatarUploadResponse>(
-      `${API_BASE_URL}/avatar/room/${roomId}/temp`,
+      getApiUrl(`/api/avatar/room/${roomId}/temp`),
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -117,7 +116,7 @@ export const confirmRoomAvatar = async (
 ): Promise<AvatarUploadResponse> => {
   try {
     const response = await axios.post<AvatarUploadResponse>(
-      `${API_BASE_URL}/avatar/room/${roomId}/confirm`,
+      getApiUrl(`/api/avatar/room/${roomId}/confirm`),
       { tempPath }
     )
     return response.data
@@ -137,7 +136,7 @@ export const uploadAiAvatar = async (
   formData.append('file', file)
   try {
     const response = await axios.post<AvatarUploadResponse>(
-      `${API_BASE_URL}/avatar/ai/${assistantId}`,
+      getApiUrl(`/api/avatar/ai/${assistantId}`),
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -165,7 +164,7 @@ export const uploadAiAvatarTemp = async (
   formData.append('file', file)
   try {
     const response = await axios.post<AvatarUploadResponse>(
-      `${API_BASE_URL}/avatar/ai/${assistantId}/temp`,
+      getApiUrl(`/api/avatar/ai/${assistantId}/temp`),
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -189,7 +188,7 @@ export const confirmAiAvatar = async (
   tempPath: string
 ): Promise<AvatarUploadResponse> => {
   const response = await axios.post<AvatarUploadResponse>(
-    `${API_BASE_URL}/avatar/ai/${assistantId}/confirm`,
+    getApiUrl(`/api/avatar/ai/${assistantId}/confirm`),
     { tempPath }
   )
   return response.data
