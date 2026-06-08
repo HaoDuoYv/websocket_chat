@@ -36,9 +36,11 @@ public class MulticastDiscoveryService {
 
     private MulticastSocket multicastSocket;
     private InetAddress group;
+    private NetworkInterface multicastNetworkInterface;
     private ScheduledExecutorService scheduler;
     private volatile int onlineUserCount = 0;
     private volatile boolean running = false;
+    private volatile boolean started = false;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
@@ -49,16 +51,17 @@ public class MulticastDiscoveryService {
             multicastSocket.setReuseAddress(true);
 
             // Join multicast group on all suitable interfaces
-            NetworkInterface networkInterface = findMulticastInterface();
-            if (networkInterface != null) {
-                multicastSocket.joinGroup(new InetSocketAddress(group, multicastPort), networkInterface);
-                log.info("Joined multicast group {} on interface {}", multicastGroup, networkInterface.getDisplayName());
+            multicastNetworkInterface = findMulticastInterface();
+            if (multicastNetworkInterface != null) {
+                multicastSocket.joinGroup(new InetSocketAddress(group, multicastPort), multicastNetworkInterface);
+                log.info("Joined multicast group {} on interface {}", multicastGroup, multicastNetworkInterface.getDisplayName());
             } else {
                 multicastSocket.joinGroup(group);
                 log.info("Joined multicast group {} (default interface)", multicastGroup);
             }
 
             running = true;
+            started = true;
 
             // Start listener thread
             Thread listenerThread = new Thread(this::listen, "discovery-listener");
@@ -74,7 +77,8 @@ public class MulticastDiscoveryService {
             scheduler.scheduleAtFixedRate(this::broadcastServerInfo, 5, BROADCAST_INTERVAL_SECONDS, TimeUnit.SECONDS);
 
             log.info("Multicast discovery service started on {}:{} (group={})", getLocalIp(), multicastPort, multicastGroup);
-        } catch (IOException e) {
+        } catch (Exception e) {
+            started = false;
             log.error("Failed to start multicast discovery service", e);
         }
     }
@@ -82,13 +86,18 @@ public class MulticastDiscoveryService {
     @PreDestroy
     public void stop() {
         running = false;
+        started = false;
         if (scheduler != null) {
             scheduler.shutdownNow();
         }
         if (multicastSocket != null && !multicastSocket.isClosed()) {
             try {
                 if (group != null) {
-                    multicastSocket.leaveGroup(group);
+                    if (multicastNetworkInterface != null) {
+                        multicastSocket.leaveGroup(new InetSocketAddress(group, multicastPort), multicastNetworkInterface);
+                    } else {
+                        multicastSocket.leaveGroup(group);
+                    }
                 }
                 multicastSocket.close();
             } catch (IOException e) {
@@ -98,39 +107,63 @@ public class MulticastDiscoveryService {
         log.info("Multicast discovery service stopped");
     }
 
+    public boolean isStarted() {
+        return started;
+    }
+
     public void setOnlineUserCount(int count) {
         this.onlineUserCount = count;
     }
 
     private void listen() {
-        byte[] buffer = new byte[2048];
-        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+        final int MAX_RESTARTS = 5;
+        int restartCount = 0;
+        boolean messageProcessed = false;
 
         while (running) {
             try {
-                multicastSocket.receive(packet);
-                String message = new String(packet.getData(), 0, packet.getLength(), "UTF-8");
-                InetAddress senderAddress = packet.getAddress();
-                int senderPort = packet.getPort();
+                byte[] buffer = new byte[2048];
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
-                log.debug("Received discovery message from {}: {}", senderAddress, message);
+                while (running) {
+                    multicastSocket.receive(packet);
+                    String message = new String(packet.getData(), 0, packet.getLength(), "UTF-8");
+                    InetAddress senderAddress = packet.getAddress();
+                    int senderPort = packet.getPort();
 
-                Map<String, Object> received = objectMapper.readValue(message, Map.class);
-                String type = (String) received.get("type");
+                    log.debug("Received discovery message from {}: {}", senderAddress, message);
 
-                if ("discovery-request".equals(type)) {
-                    // Respond with server info directly to the sender
-                    Map<String, Object> response = buildServerInfo();
-                    response.put("type", "discovery-response");
-                    byte[] responseBytes = objectMapper.writeValueAsBytes(response);
-                    DatagramPacket responsePacket = new DatagramPacket(
-                            responseBytes, responseBytes.length, senderAddress, senderPort);
-                    multicastSocket.send(responsePacket);
-                    log.debug("Sent discovery response to {}:{}", senderAddress, senderPort);
+                    Map<String, Object> received = objectMapper.readValue(message, Map.class);
+                    String type = (String) received.get("type");
+
+                    if ("discovery-request".equals(type)) {
+                        // Respond with server info directly to the sender
+                        Map<String, Object> response = buildServerInfo();
+                        response.put("type", "discovery-response");
+                        byte[] responseBytes = objectMapper.writeValueAsBytes(response);
+                        DatagramPacket responsePacket = new DatagramPacket(
+                                responseBytes, responseBytes.length, senderAddress, senderPort);
+                        multicastSocket.send(responsePacket);
+                        log.debug("Sent discovery response to {}:{}", senderAddress, senderPort);
+                    }
+                    messageProcessed = true;
+                    restartCount = 0;
                 }
-            } catch (IOException e) {
-                if (running) {
-                    log.error("Error in discovery listener", e);
+            } catch (Exception e) {
+                if (!running) {
+                    break;
+                }
+                log.error("Error in discovery listener", e);
+                restartCount++;
+                if (restartCount > MAX_RESTARTS) {
+                    log.error("Discovery listener exceeded max restarts ({}), giving up", MAX_RESTARTS);
+                    break;
+                }
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
                 }
             }
         }

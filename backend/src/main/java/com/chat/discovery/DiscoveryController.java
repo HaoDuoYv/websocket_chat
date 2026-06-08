@@ -22,6 +22,12 @@ public class DiscoveryController {
     @Value("${server.port:8081}")
     private int serverPort;
 
+    private final MulticastDiscoveryService discoveryService;
+
+    public DiscoveryController(MulticastDiscoveryService discoveryService) {
+        this.discoveryService = discoveryService;
+    }
+
     @GetMapping("/info")
     public ResponseEntity<Map<String, Object>> getInfo() {
         Map<String, Object> info = new LinkedHashMap<>();
@@ -34,6 +40,10 @@ public class DiscoveryController {
 
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
-        return ResponseEntity.ok(Map.of("status", "ok"));
+        if (discoveryService.isStarted()) {
+            return ResponseEntity.ok(Map.of("status", "ok"));
+        } else {
+            return ResponseEntity.ok(Map.of("status", "unavailable"));
+        }
     }
 }
